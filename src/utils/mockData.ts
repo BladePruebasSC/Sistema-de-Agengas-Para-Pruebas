@@ -10,24 +10,7 @@ export const services: Service[] = [
 
 // Initial mock appointments
 export const appointments: Appointment[] = [
-  {
-    id: '1',
-    date: new Date(new Date().setDate(new Date().getDate() + 1)),
-    time: '10:00',
-    clientName: 'John Doe',
-    clientPhone: '555-123-4567',
-    service: 'Haircut',
-    confirmed: true
-  },
-  {
-    id: '2',
-    date: new Date(new Date().setDate(new Date().getDate() + 2)),
-    time: '15:30',
-    clientName: 'Mike Smith',
-    clientPhone: '555-987-6543',
-    service: 'Beard Trim',
-    confirmed: true
-  }
+
 ];
 
 // Sample holidays
@@ -35,12 +18,12 @@ export const holidays: Holiday[] = [
   {
     id: '1',
     date: new Date(new Date().getFullYear(), 11, 25), // Christmas
-    description: 'Christmas Day'
+    description: 'Dia de Navidad'
   },
   {
     id: '2',
     date: new Date(new Date().getFullYear(), 0, 1), // New Year's Day
-    description: 'New Year\'s Day'
+    description: 'Año Nuevo'
   }
 ];
 
@@ -50,7 +33,7 @@ export const blockedTimes: BlockedTime[] = [
     id: '1',
     date: new Date(new Date().setDate(new Date().getDate() + 3)),
     timeSlots: ['09:00', '09:30', '10:00'],
-    reason: 'Staff Meeting'
+    reason: 'Diligencias'
   }
 ];
 
