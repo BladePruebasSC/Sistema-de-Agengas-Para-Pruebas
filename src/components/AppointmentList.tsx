@@ -19,11 +19,11 @@ const AppointmentList: React.FC = () => {
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="p-6">
-        <h2 className="text-2xl font-semibold mb-4">My Appointments</h2>
+        <h2 className="text-2xl font-semibold mb-4">Mis Citas</h2>
         
         {sortedAppointments.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-gray-500">You don't have any appointments yet.</p>
+            <p className="text-gray-500">Aún no tienes citas.</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
@@ -60,7 +60,7 @@ const AppointmentList: React.FC = () => {
                           ? 'bg-green-100 text-green-800'
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {appointment.confirmed ? 'Confirmed' : 'Pending'}
+                        {appointment.confirmed ? 'Confirmada' : 'Pendente'}
                       </span>
                     </div>
                   </div>

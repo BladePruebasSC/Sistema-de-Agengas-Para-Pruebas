@@ -26,18 +26,18 @@ function App() {
             <div className="container mx-auto px-4">
               <div className="flex flex-col md:flex-row justify-between items-center">
                 <div className="mb-4 md:mb-0">
-                  <h3 className="text-xl font-bold">Barber Shop</h3>
-                  <p className="text-gray-400 mt-1">Premium hair care for men</p>
+                  <h3 className="text-xl font-bold">Gaston Stylo Barber Shop</h3>
+                  <p className="text-gray-400 mt-1">La mejor barberia del pais</p>
                 </div>
                 
                 <div className="text-gray-400 text-sm">
-                  <p>123 Main Street, City</p>
-                  <p>Phone: (555) 123-4567</p>
+                  <p>Av. Juan XXIII, Higuey</p>
+                  <p>Telefono: (809) 203-3894</p>
                 </div>
               </div>
               
               <div className="mt-6 border-t border-gray-800 pt-6 text-center text-gray-500 text-sm">
-                &copy; {new Date().getFullYear()} Barber Shop. All rights reserved.
+                &copy; {new Date().getFullYear()} Gaston Stylo Barber Shop. Todos los derechos reservados.
               </div>
             </div>
           </footer>

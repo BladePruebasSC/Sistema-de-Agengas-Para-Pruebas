@@ -11,7 +11,7 @@ const Header: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center mb-4 md:mb-0">
             <Scissors className="h-8 w-8 text-red-500 mr-2" />
-            <h1 className="text-2xl font-bold">Barbería</h1>
+            <h1 className="text-2xl font-bold">Gaston Stylo</h1>
           </div>
           
           <nav className="flex space-x-1 sm:space-x-4">
