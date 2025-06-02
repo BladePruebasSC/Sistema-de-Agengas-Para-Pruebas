@@ -20,20 +20,42 @@ const BookingForm: React.FC<BookingFormProps> = ({
 
   const [formData, setFormData] = useState({
     clientName: '',
-    clientPhone: '',
+    clientPhone: '___-___-____',
     service: services[0].id
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const formatPhoneNumber = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    const char = { 3: '-', 6: '-' };
+    let formatted = '';
+    
+    for (let i = 0; i < numbers.length && i < 10; i++) {
+      if (char[i]) formatted += char[i];
+      formatted += numbers[i];
+    }
+    
+    return formatted;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    setFormData(prev => ({
+      ...prev,
+      clientPhone: formatted
+    }));
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === 'clientPhone') return;
+    
     setFormData({
       ...formData,
       [name]: value
     });
 
-    // Clear error when field is edited
     if (errors[name]) {
       setErrors({
         ...errors,
@@ -49,7 +71,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
       newErrors.clientName = 'El nombre es obligatorio';
     }
 
-    if (!formData.clientPhone.trim()) {
+    if (!formData.clientPhone.trim() || formData.clientPhone.includes('_')) {
       newErrors.clientPhone = 'El teléfono es obligatorio';
     } else if (!/^\d{3}-\d{3}-\d{4}$/.test(formData.clientPhone)) {
       newErrors.clientPhone = 'Formato: 555-123-4567';
@@ -59,35 +81,37 @@ const BookingForm: React.FC<BookingFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) {
       return;
     }
 
-    // Create appointment
     const selectedService = services.find(s => s.id === formData.service)?.name || '';
 
-    createAppointment({
-      date: selectedDate,
-      time: selectedTime,
-      clientName: formData.clientName,
-      clientPhone: formData.clientPhone,
-      service: selectedService,
-      confirmed: true
-    });
+    try {
+      await createAppointment({
+        date: selectedDate,
+        time: selectedTime,
+        clientName: formData.clientName,
+        clientPhone: formData.clientPhone,
+        service: selectedService,
+        confirmed: true
+      });
 
-    toast.success(
-      <div>
-        <p className="font-bold">¡Cita confirmada!</p>
-        <p>Confirmación enviada por WhatsApp a {formData.clientPhone}</p>
-      </div>,
-      { duration: 5000 }
-    );
+      toast.success(
+        <div>
+          <p className="font-bold">¡Cita confirmada!</p>
+          <p>Confirmación enviada por WhatsApp a {formData.clientPhone}</p>
+        </div>,
+        { duration: 5000 }
+      );
 
-    // Reset form and notify parent
-    onSuccess();
+      onSuccess();
+    } catch (error) {
+      toast.error('Error al crear la cita. Por favor intenta nuevamente.');
+    }
   };
 
   const selectedServiceDetails = services.find(s => s.id === formData.service);
@@ -129,7 +153,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
               >
                 {services.map(service => (
                   <option key={service.id} value={service.id}>
-                    {service.name} - ${service.price} ({service.duration} min)
+                    {service.name} - ${service.price}
                   </option>
                 ))}
               </select>
@@ -165,11 +189,11 @@ const BookingForm: React.FC<BookingFormProps> = ({
                 type="text"
                 name="clientPhone"
                 value={formData.clientPhone}
-                onChange={handleChange}
+                onChange={handlePhoneChange}
                 className={`block w-full p-2 border ${
                   errors.clientPhone ? 'border-red-500' : 'border-gray-300'
                 } rounded-md shadow-sm focus:ring-red-500 focus:border-red-500`}
-                placeholder="555-123-4567"
+                placeholder="000-000-0000"
               />
               {errors.clientPhone && (
                 <p className="mt-1 text-sm text-red-600">{errors.clientPhone}</p>

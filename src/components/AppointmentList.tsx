@@ -1,20 +1,30 @@
 import React from 'react';
 import { format } from 'date-fns';
-import { Calendar, Clock, User, Scissors } from 'lucide-react';
+import { Calendar, Clock, User, Scissors, Trash2 } from 'lucide-react';
 import { useAppointments } from '../context/AppointmentContext';
+import toast from 'react-hot-toast';
 
 const AppointmentList: React.FC = () => {
-  const { appointments } = useAppointments();
+  const { appointments, deleteAppointment, userPhone } = useAppointments();
+  
+  // Filter appointments by user's phone number
+  const userAppointments = appointments.filter(app => app.clientPhone === userPhone);
   
   // Sort appointments by date and time
-  const sortedAppointments = [...appointments].sort((a, b) => {
-    // Sort by date first
+  const sortedAppointments = [...userAppointments].sort((a, b) => {
     const dateComparison = a.date.getTime() - b.date.getTime();
     if (dateComparison !== 0) return dateComparison;
-    
-    // If same date, sort by time
     return a.time.localeCompare(b.time);
   });
+
+  const handleDelete = async (appointment: any) => {
+    try {
+      await deleteAppointment(appointment.id);
+      toast.success('Cita cancelada exitosamente');
+    } catch (error) {
+      toast.error('Error al cancelar la cita');
+    }
+  };
   
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
@@ -23,7 +33,7 @@ const AppointmentList: React.FC = () => {
         
         {sortedAppointments.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-gray-500">Aún no tienes citas.</p>
+            <p className="text-gray-500">No tienes citas programadas.</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
@@ -49,20 +59,30 @@ const AppointmentList: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="mt-4 md:mt-0 flex flex-col items-start md:items-end">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <User className="h-4 w-4 mr-1" />
-                      <span>{appointment.clientName}</span>
+                  <div className="mt-4 md:mt-0 flex items-center space-x-4">
+                    <div className="flex flex-col items-end">
+                      <div className="flex items-center text-sm text-gray-600">
+                        <User className="h-4 w-4 mr-1" />
+                        <span>{appointment.clientName}</span>
+                      </div>
+                      <div className="mt-2">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                          appointment.confirmed
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {appointment.confirmed ? 'Confirmada' : 'Pendiente'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-2">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        appointment.confirmed
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {appointment.confirmed ? 'Confirmada' : 'Pendente'}
-                      </span>
-                    </div>
+                    
+                    <button
+                      onClick={() => handleDelete(appointment)}
+                      className="text-red-600 hover:text-red-800 transition-colors"
+                      title="Cancelar cita"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
                   </div>
                 </div>
               </div>
