@@ -8,7 +8,7 @@ import { generateTimeSlots } from '../../utils/businessHours';
 import toast from 'react-hot-toast';
 
 interface BlockedTimeFormProps {
-  onBlockTime: (date: Date | null, time: string | null, reason: string) => void;
+  onBlockTime: (date: Date, selectedTimes: string[], reason: string) => Promise<void>;
 }
 
 const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
@@ -30,35 +30,32 @@ const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
     e.preventDefault();
 
     if (!date) {
-      toast.error('Por favor selecciona una fecha');
+      toast.error('Debe seleccionar una fecha');
       return;
     }
 
     if (selectedTimes.length === 0) {
-      toast.error('Por favor selecciona al menos un horario');
+      toast.error('Debe seleccionar al menos un horario');
       return;
     }
 
-    if (!reason.trim()) {
-      toast.error('Por favor ingresa un motivo');
-      return;
-    }
-
-    // Guarda cada horario como un registro separado
-    for (const time of selectedTimes) {
+    try {
       await createBlockedTime({
-        date,
-        time,
-        reason
+        date: date, // Ahora sabemos que date no es null
+        timeSlots: selectedTimes.sort(), // Ordenamos los horarios
+        reason: reason.trim()
       });
+      
+      toast.success('Horarios bloqueados exitosamente');
+      
+      // Limpiar el formulario
+      setDate(null);
+      setSelectedTimes([]);
+      setReason('');
+      
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
     }
-
-    toast.success('Horarios bloqueados exitosamente');
-
-    // Reset form
-    setDate(null);
-    setSelectedTimes([]);
-    setReason('');
   };
   
   const availableTimeSlots = date ? generateTimeSlots(date) : [];

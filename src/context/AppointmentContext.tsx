@@ -8,13 +8,9 @@ interface AppointmentContextType {
   holidays: Holiday[];
   blockedTimes: BlockedTime[];
   userPhone: string | null;
-  createAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<Appointment>;
-  createHoliday: (holiday: Omit<Holiday, 'id'>) => Promise<Holiday>;
-  createBlockedTime: (blockedTime: Omit<BlockedTime, 'id'>) => Promise<BlockedTime>;
-  deleteAppointment: (id: string) => Promise<void>;
-  removeHoliday: (id: string) => Promise<void>;
-  removeBlockedTime: (id: string) => Promise<void>;
   setUserPhone: (phone: string) => void;
+  deleteAppointment: (id: string) => Promise<void>;
+  createAppointment: (appointmentData: CreateAppointmentData) => Promise<Appointment>; // Agregar esta línea
 }
 
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
@@ -31,7 +27,9 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
-  const [userPhone, setUserPhone] = useState<string | null>(null);
+  const [userPhone, setUserPhone] = useState<string | null>(() => {
+    return localStorage.getItem('userPhone');
+  });
 
   useEffect(() => {
     fetchAppointments();
@@ -50,10 +48,18 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       return;
     }
 
-    setAppointments(data.map(app => ({
-      ...app,
-      date: new Date(app.date)
-    })));
+    // Log para verificar los datos que vienen de Supabase
+    console.log('Datos crudos de Supabase:', data);
+
+    const formattedAppointments = data.map(appointment => ({
+      ...appointment,
+      date: new Date(appointment.date)
+    }));
+
+    // Log para verificar el formateo
+    console.log('Citas formateadas:', formattedAppointments);
+
+    setAppointments(formattedAppointments);
   };
 
   const fetchHolidays = async () => {
@@ -90,25 +96,27 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     })));
   };
 
-  const createAppointment = async (appointmentData: Omit<Appointment, 'id'>): Promise<Appointment> => {
-    const { data, error } = await supabase
-      .from('appointments')
-      .insert([appointmentData])
-      .select()
-      .single();
+  const createAppointment = async (appointmentData: CreateAppointmentData) => {
+    try {
+      const { error, data } = await supabase
+        .from('appointments')
+        .insert([appointmentData])
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) {
+        console.error('Error creating appointment:', error);
+        throw error;
+      }
 
-    const newAppointment = {
-      ...data,
-      date: new Date(data.date)
-    };
+      // Update local state
+      setAppointments(prev => [...prev, { ...data, date: new Date(data.date) }]);
 
-    setAppointments(prev => [...prev, newAppointment]);
-    setUserPhone(newAppointment.clientPhone); // <-- Agrega esta línea
-    await notifyAppointmentCreated(newAppointment);
-
-    return newAppointment;
+      return data;
+    } catch (error) {
+      console.error('Error in createAppointment:', error);
+      throw error;
+    }
   };
 
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
@@ -148,18 +156,52 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const deleteAppointment = async (id: string): Promise<void> => {
-    const appointment = appointments.find(app => app.id === id);
-    if (!appointment) return;
+    try {
+      // Primero verificamos que la cita existe
+      const { data: existingAppointment } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-    const { error } = await supabase
-      .from('appointments')
-      .delete()
-      .eq('id', id);
+      if (!existingAppointment) {
+        throw new Error('La cita no existe');
+      }
 
-    if (error) throw error;
+      // Intentamos eliminar la cita
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id);
 
-    setAppointments(prev => prev.filter(app => app.id !== id));
-    await notifyAppointmentCancelled(appointment, appointments);
+      if (error) {
+        console.error('Error en Supabase:', error);
+        throw new Error('No se pudo eliminar la cita');
+      }
+
+      // Si llegamos aquí, la eliminación fue exitosa
+      // Actualizamos el estado local
+      setAppointments(prevAppointments => 
+        prevAppointments.filter(app => app.id !== id)
+      );
+
+      // Volvemos a cargar las citas para asegurarnos de estar sincronizados
+      const { data: updatedData, error: fetchError } = await supabase
+        .from('appointments')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (!fetchError && updatedData) {
+        setAppointments(updatedData.map(app => ({
+          ...app,
+          date: new Date(app.date)
+        })));
+      }
+
+    } catch (error) {
+      console.error('Error completo:', error);
+      throw error;
+    }
   };
 
   const removeHoliday = async (id: string): Promise<void> => {
@@ -184,19 +226,20 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     setBlockedTimes(prev => prev.filter(block => block.id !== id));
   };
 
+  const handleSetUserPhone = (phone: string) => {
+    setUserPhone(phone);
+    localStorage.setItem('userPhone', phone);
+  };
+
   return (
     <AppointmentContext.Provider value={{
       appointments,
       holidays,
       blockedTimes,
       userPhone,
-      createAppointment,
-      createHoliday,
-      createBlockedTime,
+      setUserPhone: handleSetUserPhone,
       deleteAppointment,
-      removeHoliday,
-      removeBlockedTime,
-      setUserPhone
+      createAppointment, // Agregar esta línea
     }}>
       {children}
     </AppointmentContext.Provider>

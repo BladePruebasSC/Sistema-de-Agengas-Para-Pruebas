@@ -4,14 +4,18 @@ export interface TimeSlot {
   isBusinessHour: boolean;
 }
 
-export interface Appointment {
-  id: string;
+export interface CreateAppointmentData {
   date: Date;
   time: string;
   clientName: string;
   clientPhone: string;
   service: string;
   confirmed: boolean;
+}
+
+export interface Appointment extends CreateAppointmentData {
+  id: string;
+  created_at: string;
 }
 
 export interface Holiday {
