@@ -27,25 +27,16 @@ const BookingForm: React.FC<BookingFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const formatPhoneNumber = (value: string) => {
-    // Elimina todo excepto números
     const numbers = value.replace(/\D/g, '');
+    const char = { 3: '-', 6: '-' };
+    let formatted = '';
     
-    // Garantiza que no exceda 10 dígitos
-    const truncated = numbers.slice(0, 10);
+    for (let i = 0; i < numbers.length && i < 10; i++) {
+      if (char[i]) formatted += char[i];
+      formatted += numbers[i];
+    }
     
-    // Formatea el número según el patrón XXX-XXX-XXXX
-    const matches = truncated.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
-    
-    if (!matches) return '';
-    
-    const formatted = matches
-      .slice(1)
-      .filter(Boolean)
-      .join('-');
-      
-    // Si está incompleto, rellena con guiones bajos
-    const remaining = 12 - formatted.length;
-    return formatted + '_'.repeat(Math.max(0, remaining));
+    return formatted;
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {

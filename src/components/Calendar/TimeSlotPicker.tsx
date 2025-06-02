@@ -19,51 +19,38 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   isHoliday
 }) => {
   const { blockedTimes } = useAppointments();
-
-  const blockedTimeSlots = React.useMemo(() => {
-    if (!blockedTimes || !date) return [];
-
-    // Find all blocked times for this date
-    const blockedForDate = blockedTimes.filter(block => {
-      if (!block || !block.date) return false;
-      
-      const blockDate = new Date(block.date);
-      const targetDate = new Date(date);
-      
-      return blockDate.getFullYear() === targetDate.getFullYear() &&
-             blockDate.getMonth() === targetDate.getMonth() &&
-             blockDate.getDate() === targetDate.getDate();
-    });
-
-    // Combine all blocked times into a Set
-    const timeSlots = new Set<string>();
-    
-    blockedForDate.forEach(block => {
-      // Check if timeSlots exists and is an array
-      if (block.timeSlots && Array.isArray(block.timeSlots)) {
-        block.timeSlots.forEach(time => {
-          if (time) timeSlots.add(time);
-        });
-      }
-    });
-
-    return Array.from(timeSlots);
-  }, [blockedTimes, date]);
-
-  // Check if a specific time is blocked
-  const isTimeBlocked = React.useCallback((time: string) => {
-    return blockedTimeSlots.includes(time);
-  }, [blockedTimeSlots]);
-
-  // Generate available time slots
-  const allTimeSlots = generateTimeSlots(date);
-
-  // Rest of the render logic
+  
+  const blockedTimesForDate = blockedTimes.find(
+    block => 
+      block.date.getFullYear() === date.getFullYear() &&
+      block.date.getMonth() === date.getMonth() &&
+      block.date.getDate() === date.getDate()
+  );
+  
+  const blockedTimeSlots = blockedTimesForDate?.timeSlots || [];
+  const allTimeSlots = generateTimeSlots(date, blockedTimeSlots);
+  
+  if (isHoliday) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
+        <p className="text-red-600 font-medium">Este día está marcado como feriado.</p>
+        <p className="text-red-500 mt-1">No hay citas disponibles.</p>
+      </div>
+    );
+  }
+  
+  if (allTimeSlots.length === 0) {
+    return (
+      <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
+        <p className="text-gray-600 font-medium">No hay horarios disponibles para este día.</p>
+      </div>
+    );
+  }
+  
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
       {allTimeSlots.map((time) => {
-        const isBlocked = isTimeBlocked(time);
-        const available = isTimeSlotAvailable(date, time) && !isBlocked;
+        const available = isTimeSlotAvailable(date, time);
         const isValid = isBusinessHour(date, time);
         
         let className = "time-slot p-2 rounded-md text-center cursor-pointer";
@@ -75,9 +62,9 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
         } else if (!isValid) {
           className += " non-business";
           statusText = "No disponible";
-        } else if (!available || isBlocked) {
+        } else if (!available) {
           className += " booked";
-          statusText = "Bloqueado";
+          statusText = "Ocupado";
         } else {
           className += " available";
           statusText = "Disponible";

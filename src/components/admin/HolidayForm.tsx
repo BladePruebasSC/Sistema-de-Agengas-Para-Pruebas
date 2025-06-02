@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 const HolidayForm: React.FC = () => {
   const [date, setDate] = useState<Date | null>(null);
   const [description, setDescription] = useState('');
-  const { holidays, createHoliday } = useAppointments();
+  const { createHoliday } = useAppointments();
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,21 +20,16 @@ const HolidayForm: React.FC = () => {
     }
     
     if (!description.trim()) {
-      toast.error('Por favor ingresa una descripción');
+      toast.error('Por favor ingresa una descripción del feriado');
       return;
     }
     
-    // Verifica si ya existe un feriado para esa fecha
-    const exists = holidays.some(
-      h => new Date(h.date).toDateString() === date.toDateString()
-    );
-    if (exists) {
-      toast.error('Ya existe un feriado para esa fecha');
-      return;
-    }
+    createHoliday({
+      date,
+      description
+    });
     
-    createHoliday(date, description);
-    toast.success('Feriado agregado');
+    toast.success('Feriado agregado exitosamente');
     
     // Reset form
     setDate(null);
