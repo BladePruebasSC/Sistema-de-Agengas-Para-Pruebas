@@ -6,7 +6,6 @@ import BookingPage from './pages/BookingPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import AdminPage from './pages/AdminPage';
 import { AppointmentProvider } from './context/AppointmentContext';
-import ConsultarCitas from './components/ConsultarCitas';
 
 function App() {
   return (

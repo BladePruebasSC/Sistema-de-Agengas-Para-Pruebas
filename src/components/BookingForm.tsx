@@ -4,18 +4,11 @@ import toast from 'react-hot-toast';
 import { services } from '../utils/mockData';
 import { useAppointments } from '../context/AppointmentContext';
 import { Phone, MessageSquare, Calendar, Clock, Scissors } from 'lucide-react';
-import { Appointment } from '../types';
 
 interface BookingFormProps {
   selectedDate: Date;
   selectedTime: string;
   onSuccess: () => void;
-}
-
-interface FormData {
-  clientName: string;
-  clientPhone: string;
-  service: string;
 }
 
 const BookingForm: React.FC<BookingFormProps> = ({
@@ -24,7 +17,8 @@ const BookingForm: React.FC<BookingFormProps> = ({
   onSuccess
 }) => {
   const { createAppointment } = useAppointments();
-  const [formData, setFormData] = useState<FormData>({
+
+  const [formData, setFormData] = useState({
     clientName: '',
     clientPhone: '___-___-____',
     service: services[0].id
@@ -33,16 +27,25 @@ const BookingForm: React.FC<BookingFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const formatPhoneNumber = (value: string) => {
+    // Elimina todo excepto números
     const numbers = value.replace(/\D/g, '');
-    const char: { [key: number]: string } = { 3: '-', 6: '-' };
-    let formatted = '';
     
-    for (let i = 0; i < numbers.length && i < 10; i++) {
-      if (char[i]) formatted += char[i];
-      formatted += numbers[i];
-    }
+    // Garantiza que no exceda 10 dígitos
+    const truncated = numbers.slice(0, 10);
     
-    return formatted;
+    // Formatea el número según el patrón XXX-XXX-XXXX
+    const matches = truncated.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
+    
+    if (!matches) return '';
+    
+    const formatted = matches
+      .slice(1)
+      .filter(Boolean)
+      .join('-');
+      
+    // Si está incompleto, rellena con guiones bajos
+    const remaining = 12 - formatted.length;
+    return formatted + '_'.repeat(Math.max(0, remaining));
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,24 +92,33 @@ const BookingForm: React.FC<BookingFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) return;
+
+    if (!validateForm()) {
+      return;
+    }
+
+    const selectedService = services.find(s => s.id === formData.service)?.name || '';
 
     try {
-      const newAppointment: Omit<Appointment, 'id'> = {
+      await createAppointment({
         date: selectedDate,
         time: selectedTime,
         clientName: formData.clientName,
         clientPhone: formData.clientPhone,
-        service: formData.service,
-        status: 'confirmed'  // Cambiado de 'scheduled' a 'confirmed'
-      };
+        service: selectedService,
+        confirmed: true
+      });
 
-      await createAppointment(newAppointment);
-      toast.success('Cita agendada exitosamente');
+      toast.success(
+        <div>
+          <p className="font-bold">¡Cita confirmada!</p>
+          <p>Confirmación enviada por WhatsApp a {formData.clientPhone}</p>
+        </div>,
+        { duration: 5000 }
+      );
+
       onSuccess();
     } catch (error) {
-      console.error('Error creating appointment:', error);
       toast.error('Error al crear la cita. Por favor intenta nuevamente.');
     }
   };

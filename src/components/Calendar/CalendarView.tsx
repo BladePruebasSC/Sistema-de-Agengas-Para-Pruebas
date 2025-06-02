@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { format, isToday, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { CalendarProps } from 'react-calendar';
 import Calendar from 'react-calendar';
-import 'react-calendar/dist/Calendar.css';
-import './Calendar.css';
 import { useAppointments } from '../../context/AppointmentContext';
 import TimeSlotPicker from './TimeSlotPicker';
+import { isBusinessHour } from '../../utils/businessHours';
+import { isTimeSlotAvailable } from '../../utils/mockData';
+import './Calendar.css';
 
 interface CalendarViewProps {
   onDateTimeSelected: (date: Date, time: string) => void;
@@ -23,22 +23,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   onDateChange,
   onTimeChange
 }) => {
-  const { holidays, isTimeSlotAvailable } = useAppointments();
+  const { holidays } = useAppointments();
   const today = startOfDay(new Date());
 
   const isHoliday = (date: Date) => {
-    return holidays.some(holiday => 
-      holiday.date.toDateString() === date.toDateString()
+    return holidays.some(
+      holiday =>
+        holiday.date.getFullYear() === date.getFullYear() &&
+        holiday.date.getMonth() === date.getMonth() &&
+        holiday.date.getDate() === date.getDate()
     );
   };
 
-  const handleDateChange: CalendarProps['onChange'] = (value) => {
-    if (value instanceof Date) {
-      onDateChange(value);
-    }
-  };
-
-  const tileClassName: CalendarProps['tileClassName'] = ({ date, view }) => {
+  const tileClassName = ({ date, view }: { date: Date; view: string }) => {
     if (view !== 'month') return '';
     
     const classes = [];
@@ -48,38 +45,29 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
     
     if (isHoliday(date)) {
-      classes.push('holiday bg-red-100');
+      classes.push('holiday');
     }
     
     return classes.join(' ');
   };
 
-  const tileDisabled: CalendarProps['tileDisabled'] = ({ date, view }) => {
+  const tileDisabled = ({ date, view }: { date: Date; view: string }) => {
     if (view !== 'month') return false;
     return isBefore(date, today) || isHoliday(date);
   };
 
+  const tileContent = ({ date, view }: { date: Date; view: string }) => {
+    if (view !== 'month') return null;
+    
+    if (isHoliday(date)) {
+      return <div className="text-xs mt-1 text-red-500">Feriado</div>;
+    }
+    
+    return null;
+  };
+
   const handleTimeSelect = (time: string) => {
     onTimeChange(time);
-    if (selectedDate) {
-      onDateTimeSelected(selectedDate, time);
-    }
-  };
-
-  const formatCalendarDay = (locale: string | undefined, date: Date) => {
-    return format(date, 'd');
-  };
-
-  const formatCalendarMonth = (locale: string | undefined, date: Date) => {
-    return format(date, 'MMMM', { locale: es });
-  };
-
-  const formatCalendarMonthYear = (locale: string | undefined, date: Date) => {
-    return format(date, 'MMMM yyyy', { locale: es });
-  };
-
-  const formatCalendarWeekday = (locale: string | undefined, date: Date) => {
-    return format(date, 'EEEEE', { locale: es });
   };
 
   return (
@@ -92,19 +80,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             <h3 className="text-lg font-medium mb-3">1. Elige una Fecha</h3>
             <div className="calendar-container">
               <Calendar
-                onChange={handleDateChange}
+                onChange={onDateChange}
                 value={selectedDate}
                 tileClassName={tileClassName}
                 tileDisabled={tileDisabled}
+                tileContent={tileContent}
                 minDate={today}
                 className="rounded-lg border"
                 next2Label={null}
                 prev2Label={null}
-                locale="es-ES"
-                formatDay={formatCalendarDay}
-                formatMonth={formatCalendarMonth}
-                formatMonthYear={formatCalendarMonthYear}
-                formatShortWeekday={formatCalendarWeekday}
+                locale={es}
+                formatDay={(locale, date) => format(date, 'd')}
+                formatMonth={(locale, date) => format(date, 'MMMM', { locale: es })}
+                formatMonthYear={(locale, date) => format(date, 'MMMM yyyy', { locale: es })}
+                formatShortWeekday={(locale, date) => format(date, 'EEEEE', { locale: es })}
               />
             </div>
             <div className="mt-4 text-center text-gray-600">
@@ -134,4 +123,4 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   );
 };
 
-export default CalendarView;
+export default CalendarView

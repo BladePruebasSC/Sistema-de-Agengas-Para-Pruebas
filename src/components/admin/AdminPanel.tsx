@@ -6,12 +6,10 @@ import { useAppointments } from '../../context/AppointmentContext';
 import HolidayForm from './HolidayForm';
 import BlockedTimeForm from './BlockedTimeForm';
 import { Holiday, BlockedTime } from '../../types';
-import { Trash2 } from 'lucide-react';
-import toast from 'react-hot-toast';
 
 const AdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'holidays' | 'blockedTimes'>('holidays');
-  const { holidays, blockedTimes, deleteHoliday, deleteBlockedTime, createBlockedTime } = useAppointments();
+  const { holidays, blockedTimes, removeHoliday, removeBlockedTime, createBlockedTime } = useAppointments();
   
   const handleBlockTime = async (selectedDate: Date | null, selectedTime: string | null, reason: string) => {
     if (!selectedDate || !selectedTime) return;
@@ -21,26 +19,6 @@ const AdminPanel: React.FC = () => {
       time: selectedTime,
       reason: reason,
     });
-  };
-
-  const handleDeleteHoliday = async (id: string) => {
-    try {
-      await deleteHoliday(id);
-      toast.success('Día festivo eliminado exitosamente');
-    } catch (error) {
-      toast.error('Error al eliminar el día festivo');
-      console.error(error);
-    }
-  };
-
-  const handleDeleteBlockedTime = async (id: string) => {
-    try {
-      await deleteBlockedTime(id);
-      toast.success('Horario bloqueado eliminado exitosamente');
-    } catch (error) {
-      toast.error('Error al eliminar el horario bloqueado');
-      console.error(error);
-    }
   };
 
   return (
@@ -86,7 +64,7 @@ const AdminPanel: React.FC = () => {
                     <HolidayCard
                       key={holiday.id}
                       holiday={holiday}
-                      onDelete={handleDeleteHoliday}
+                      onDelete={removeHoliday}
                     />
                   ))}
                 </div>
@@ -108,7 +86,7 @@ const AdminPanel: React.FC = () => {
                     <BlockedTimeCard
                       key={blockedTime.id}
                       blockedTime={blockedTime}
-                      onDelete={handleDeleteBlockedTime}
+                      onDelete={removeBlockedTime}
                     />
                   ))}
                 </div>
@@ -144,7 +122,7 @@ const HolidayCard: React.FC<HolidayCardProps> = ({ holiday, onDelete }) => {
           className="text-gray-400 hover:text-red-500 transition-colors"
           title="Eliminar feriado"
         >
-          <Trash2 className="h-5 w-5" />
+          <XCircle className="h-5 w-5" />
         </button>
       </div>
     </div>
@@ -181,7 +159,7 @@ const BlockedTimeCard: React.FC<BlockedTimeCardProps> = ({ blockedTime, onDelete
           className="text-gray-400 hover:text-red-500 transition-colors"
           title="Eliminar horario bloqueado"
         >
-          <Trash2 className="h-5 w-5" />
+          <XCircle className="h-5 w-5" />
         </button>
       </div>
     </div>

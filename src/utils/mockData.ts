@@ -8,15 +8,17 @@ export const services: Service[] = [
   { id: '4', name: 'Corte + Barba + Ceja', price: 800, duration: 45 },
 ];
 
-// Initial appointments array
-export const appointments: Appointment[] = [];
+// Initial mock appointments
+export const appointments: Appointment[] = [
 
-// Sample holidays with proper date handling
+];
+
+// Sample holidays
 export const holidays: Holiday[] = [
   {
     id: '1',
     date: new Date(new Date().getFullYear(), 11, 25), // Christmas
-    description: 'Día de Navidad'
+    description: 'Dia de Navidad'
   },
   {
     id: '2',
@@ -25,82 +27,99 @@ export const holidays: Holiday[] = [
   }
 ];
 
-// Blocked times with proper time format
+// Sample blocked times
 export const blockedTimes: BlockedTime[] = [
   {
     id: '1',
     date: new Date(new Date().setDate(new Date().getDate() + 3)),
-    time: '09:00',
-    reason: 'Diligencias'
-  },
-  {
-    id: '2',
-    date: new Date(new Date().setDate(new Date().getDate() + 3)),
-    time: '09:30',
+    timeSlots: ['09:00', '09:30', '10:00'],
     reason: 'Diligencias'
   }
 ];
 
-// Updated availability check function
-export const isTimeSlotAvailable = (date: Date, time: string): boolean => {
-  if (!date || !time) return false;
-
-  const dateString = date.toDateString();
-  
-  // Debug logs
-  console.log('Checking availability for:', { date: dateString, time });
-  
-  // Check holidays
-  const isHolidayDate = holidays.some(holiday => {
-    const holidayMatch = holiday.date.toDateString() === dateString;
-    if (holidayMatch) console.log('Holiday found:', holiday);
-    return holidayMatch;
-  });
-  
-  if (isHolidayDate) return false;
-
-  // Check blocked times
-  const isTimeBlocked = blockedTimes.some(block => {
-    const blockMatch = block.date.toDateString() === dateString && block.time === time;
-    if (blockMatch) console.log('Blocked time found:', block);
-    return blockMatch;
-  });
-  
-  if (isTimeBlocked) return false;
-
-  // Check existing appointments
-  const isBooked = appointments.some(app => {
-    const appointmentMatch = app.date.toDateString() === dateString && 
-                           app.time === time && 
-                           app.status === 'confirmed';
-    if (appointmentMatch) console.log('Existing appointment found:', app);
-    return appointmentMatch;
-  });
-  
-  if (isBooked) return false;
-
-  return true;
+// Función mejorada para verificar si una fecha es feriado
+export const isHolidayDate = (date: Date): boolean => {
+  return holidays.some(holiday => 
+    holiday.date.getFullYear() === date.getFullYear() && 
+    holiday.date.getMonth() === date.getMonth() && 
+    holiday.date.getDate() === date.getDate()
+  );
 };
 
-// Updated database operation functions
-export const addAppointment = (data: Omit<Appointment, 'id'>): Appointment => ({
-  id: crypto.randomUUID(),
-  ...data,
-});
+// Función mejorada para verificar disponibilidad
+export const isTimeSlotAvailable = (date: Date, time: string): boolean => {
+  // Primero verifica si es feriado
+  if (isHolidayDate(date)) {
+    return false;
+  }
+  
+  // Verifica si el horario está bloqueado
+  const isBlocked = blockedTimes.some(block => {
+    // Normaliza las fechas para comparar solo año, mes y día
+    const blockDate = new Date(block.date);
+    const targetDate = new Date(date);
+    
+    const sameDate = 
+      blockDate.getFullYear() === targetDate.getFullYear() && 
+      blockDate.getMonth() === targetDate.getMonth() && 
+      blockDate.getDate() === targetDate.getDate();
+    
+    // Verifica si el horario está en la lista de horarios bloqueados
+    const timeBlocked = Array.isArray(block.timeSlots) && 
+      block.timeSlots.includes(time);
+    
+    return sameDate && timeBlocked;
+  });
+  
+  if (isBlocked) return false;
+  
+  // Verifica si ya hay una cita
+  const isBooked = appointments.some(appointment => {
+    const appointmentDate = new Date(appointment.date);
+    const targetDate = new Date(date);
+    
+    const sameDate = 
+      appointmentDate.getFullYear() === targetDate.getFullYear() && 
+      appointmentDate.getMonth() === targetDate.getMonth() && 
+      appointmentDate.getDate() === targetDate.getDate();
+    
+    return sameDate && appointment.time === time;
+  });
+  
+  return !isBooked;
+};
 
-export const addHoliday = (data: Omit<Holiday, 'id'>): Holiday => ({
-  id: crypto.randomUUID(),
-  ...data,
-});
-
-export const addBlockedTime = (data: Omit<BlockedTime, 'id'>): BlockedTime => {
-  const newBlockedTime = {
+// Mock functions to simulate database operations
+export function addAppointment(data: Omit<Appointment, 'id'>): Appointment {
+  return {
     id: crypto.randomUUID(),
     ...data,
   };
-  blockedTimes.push(newBlockedTime);
-  return newBlockedTime;
-};
+}
+
+// Función mejorada para agregar feriados
+export function addHoliday(data: Omit<Holiday, 'id'>): Holiday {
+  // Verifica si ya existe un feriado en esa fecha
+  const exists = isHolidayDate(data.date);
+  if (exists) {
+    throw new Error('Ya existe un feriado en esta fecha');
+  }
+
+  const holiday: Holiday = {
+    id: crypto.randomUUID(),
+    ...data,
+  };
+  
+  holidays.push(holiday);
+  return holiday;
+}
+
+export function addBlockedTime(data: Omit<BlockedTime, 'id'>): BlockedTime {
+  return {
+    id: crypto.randomUUID(),
+    ...data,
+  };
+}
 
 export const deleteHoliday = (id: string): void => {
   const index = holidays.findIndex(holiday => holiday.id === id);

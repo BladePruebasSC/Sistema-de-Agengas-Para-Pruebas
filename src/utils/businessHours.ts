@@ -36,25 +36,86 @@ export const getDayOfWeek = (date: Date): DayOfWeek => {
   return days[date.getDay()];
 };
 
-// Función auxiliar para formatear la hora
-export const formatTime = (time: string): string => {
-  return time;
-};
-
-// Función para verificar si es horario laboral
-export const isBusinessHour = (time: string): boolean => {
-  const hour = parseInt(time.split(':')[0]);
-  return hour >= 7 && hour < 20;
-};
-
-export const generateTimeSlots = (): string[] => {
-  const slots: string[] = [];
-  // Horario de 7:00 a 19:00
-  for (let hour = 7; hour < 20; hour++) {
-    // Formatear la hora correctamente
-    const formattedHour = hour.toString().padStart(2, '0');
-    slots.push(`${formattedHour}:00`);
+export const isBusinessHour = (date: Date, time: string): boolean => {
+  const day = getDayOfWeek(date);
+  const hours = businessHours[day];
+  
+  if (!hours) return false;
+  
+  const timeValue = parseTime(time);
+  
+  if (hours.morning) {
+    const morningStart = parseTime(hours.morning.start);
+    const morningEnd = parseTime(hours.morning.end);
+    if (timeValue >= morningStart && timeValue < morningEnd) return true;
   }
-  console.log('Generated time slots in utils:', slots);
+  
+  if (hours.afternoon) {
+    const afternoonStart = parseTime(hours.afternoon.start);
+    const afternoonEnd = parseTime(hours.afternoon.end);
+    if (timeValue >= afternoonStart && timeValue < afternoonEnd) return true;
+  }
+  
+  return false;
+};
+
+export const parseTime = (time: string): number => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+export const generateTimeSlots = (date: Date, blockedTimes: string[] = []): string[] => {
+  const day = getDayOfWeek(date);
+  const hours = businessHours[day];
+  const slots: string[] = [];
+  
+  if (!hours) return slots;
+  
+  // Generate morning slots with 1-hour intervals
+  if (hours.morning) {
+    let current = parseTime(hours.morning.start);
+    const end = parseTime(hours.morning.end);
+    
+    while (current < end) {
+      const hour = Math.floor(current / 60);
+      const minute = current % 60;
+      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      
+      if (!blockedTimes.includes(timeString)) {
+        slots.push(timeString);
+      }
+      
+      // 1-hour intervals
+      current += 60;
+    }
+  }
+  
+  // Generate afternoon slots with 1-hour intervals
+  if (hours.afternoon) {
+    let current = parseTime(hours.afternoon.start);
+    const end = parseTime(hours.afternoon.end);
+    
+    while (current < end) {
+      const hour = Math.floor(current / 60);
+      const minute = current % 60;
+      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      
+      if (!blockedTimes.includes(timeString)) {
+        slots.push(timeString);
+      }
+      
+      // 1-hour intervals
+      current += 60;
+    }
+  }
+  
   return slots;
+};
+
+export const formatTime = (time: string): string => {
+  const [hours, minutes] = time.split(':');
+  const hour = parseInt(hours, 10);
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const formattedHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${formattedHour}:${minutes} ${period}`;
 };

@@ -1,41 +1,43 @@
-import { Appointment } from '../types';
-
-const WHATSAPP_API_URL = 'https://api.whatsapp.com/send';
-
-export const notifyAppointmentCreated = async (appointment: Appointment): Promise<void> => {
-  try {
-    const message = `¡Hola ${appointment.clientName}! Tu cita ha sido confirmada:\n
-🗓️ Fecha: ${appointment.date.toLocaleDateString()}\n
-⏰ Hora: ${appointment.time}\n
-💇 Servicio: ${appointment.service}\n
-¡Te esperamos!`;
-
-    const phoneNumber = appointment.clientPhone.replace(/\D/g, '');
-    const url = `${WHATSAPP_API_URL}?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-    
-    // Abre WhatsApp Web en una nueva pestaña
-    window.open(url, '_blank');
-  } catch (error) {
-    console.error('Error sending creation notification:', error);
-    throw error;
-  }
+// Since we don't have a backend API endpoint yet, we'll log messages for now
+// and implement the actual WhatsApp integration later
+export const sendWhatsAppMessage = async (to: string, message: string) => {
+  // For now, just log the message that would be sent
+  console.log('Would send WhatsApp message:', { to, message });
+  return true;
 };
 
-export const notifyAppointmentCancelled = async (appointment: Appointment): Promise<void> => {
-  try {
-    const message = `Hola ${appointment.clientName}, tu cita ha sido cancelada:\n
-🗓️ Fecha: ${appointment.date.toLocaleDateString()}\n
-⏰ Hora: ${appointment.time}\n
-💇 Servicio: ${appointment.service}\n
-Para reagendar, por favor visita nuestra página web.`;
+export const notifyAppointmentCreated = async (appointment: any) => {
+  const message = `Nueva cita agendada:\n
+Fecha: ${appointment.date}\n
+Hora: ${appointment.time}\n
+Cliente: ${appointment.clientName}\n
+Teléfono: ${appointment.clientPhone}\n
+Servicio: ${appointment.service}`;
 
-    const phoneNumber = appointment.clientPhone.replace(/\D/g, '');
-    const url = `${WHATSAPP_API_URL}?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-    
-    // Abre WhatsApp Web en una nueva pestaña
-    window.open(url, '_blank');
-  } catch (error) {
-    console.error('Error sending cancellation notification:', error);
-    throw error;
+  // Send to client
+  await sendWhatsAppMessage(appointment.clientPhone, `Tu cita ha sido confirmada:\n${message}`);
+  
+  // Send to barbershop
+  await sendWhatsAppMessage('8092033894', message);
+};
+
+export const notifyAppointmentCancelled = async (appointment: any, allAppointments: any[]) => {
+  const message = `Cita cancelada:\n
+Fecha: ${appointment.date}\n
+Hora: ${appointment.time}\n
+Este horario está ahora disponible.`;
+
+  // Notify barbershop
+  await sendWhatsAppMessage('8092033894', message);
+
+  // Notify all clients with future appointments
+  const uniquePhones = new Set(
+    allAppointments
+      .filter(app => new Date(app.date) >= new Date())
+      .map(app => app.clientPhone)
+  );
+
+  for (const phone of uniquePhones) {
+    await sendWhatsAppMessage(phone, message);
   }
 };
