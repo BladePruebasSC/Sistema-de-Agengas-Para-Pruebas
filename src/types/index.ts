@@ -23,7 +23,7 @@ export interface Holiday {
 export interface BlockedTime {
   id: string;
   date: Date;
-  timeSlots: string[];
+  time: string;
   reason: string;
 }
 

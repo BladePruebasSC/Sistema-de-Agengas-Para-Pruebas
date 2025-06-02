@@ -180,9 +180,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     if (error) throw error;
 
-    setBlockedT
-
-imes(prev => prev.filter(block => block.id !== id));
+    setBlockedTimes(prev => prev.filter(block => block.id !== id));
   };
 
   return (
