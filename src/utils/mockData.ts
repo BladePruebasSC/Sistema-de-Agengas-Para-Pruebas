@@ -48,30 +48,27 @@ export const isHolidayDate = (date: Date): boolean => {
 
 // Función mejorada para verificar disponibilidad
 export const isTimeSlotAvailable = (date: Date, time: string): boolean => {
-  // Verifica si es feriado
+  // Check if it's a holiday
   if (isHolidayDate(date)) {
     return false;
   }
 
-  // Verifica horarios bloqueados
+  // Check blocked times
   const isBlocked = blockedTimes.some(block => {
     const sameDate = 
       block.date.getFullYear() === date.getFullYear() &&
       block.date.getMonth() === date.getMonth() &&
       block.date.getDate() === date.getDate();
 
-    // Verifica si el horario está en el array de timeSlots
-    return sameDate && (
-      block.timeSlots?.includes(time) || 
-      block.time === time
-    );
+    // Only check timeSlots array
+    return sameDate && block.timeSlots.includes(time);
   });
 
   if (isBlocked) {
     return false;
   }
 
-  // Verifica si ya hay una cita existente
+  // Check existing appointments
   const isBooked = appointments.some(appointment => {
     const appointmentDate = new Date(appointment.date);
     const sameDate = 
