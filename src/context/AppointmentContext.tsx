@@ -87,7 +87,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     setBlockedTimes(data.map(block => ({
       ...block,
-      date: new Date(block.date)
+      date: new Date(block.date),
+      // Si timeSlots es string, conviértelo a array, si ya es array déjalo como está
+      timeSlots: typeof block.timeSlots === 'string' 
+        ? block.timeSlots.split(',')
+        : block.timeSlots || [block.time]
     })));
   };
 
@@ -159,22 +163,58 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
-  const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
-    const { data, error } = await supabase
-      .from('blocked_times')
-      .insert([blockedTimeData])
-      .select()
-      .single();
+  const createBlockedTime = async (blockedTime: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
+    try {
+      // Validación más robusta de timeSlots
+      if (!blockedTime?.timeSlots || !Array.isArray(blockedTime.timeSlots) || blockedTime.timeSlots.length === 0) {
+        console.error('TimeSlots invalid:', blockedTime);
+        toast.error('Debe seleccionar al menos un horario');
+        throw new Error('No time slots selected');
+      }
 
-    if (error) throw error;
+      // Log para debugging
+      console.log('Creating blocked time:', {
+        date: blockedTime.date,
+        timeSlots: blockedTime.timeSlots,
+        reason: blockedTime.reason
+      });
 
-    const newBlockedTime = {
-      ...data,
-      date: new Date(data.date)
-    };
+      const { data, error } = await supabase
+        .from('blocked_times')
+        .insert([{
+          date: blockedTime.date.toISOString().split('T')[0],
+          time: blockedTime.timeSlots[0], // Primer horario para compatibilidad
+          timeSlots: blockedTime.timeSlots, // Array de horarios
+          reason: blockedTime.reason || ''
+        }])
+        .select()
+        .single();
 
-    setBlockedTimes(prev => [...prev, newBlockedTime]);
-    return newBlockedTime;
+      if (error) {
+        console.error('Error creating blocked time:', error);
+        toast.error('Error al bloquear el horario');
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('No data returned from insert');
+      }
+
+      const newBlockedTime: BlockedTime = {
+        ...data,
+        date: new Date(data.date),
+        timeSlots: data.timeSlots || [data.time] // Fallback a time si timeSlots es null
+      };
+
+      setBlockedTimes(prev => [...prev, newBlockedTime]);
+      toast.success('Horarios bloqueados correctamente');
+      return newBlockedTime;
+
+    } catch (err) {
+      console.error('Error in createBlockedTime:', err);
+      toast.error('Error al bloquear el horario');
+      throw err;
+    }
   };
 
   const deleteAppointment = async (id: string): Promise<void> => {

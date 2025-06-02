@@ -6,19 +6,29 @@ import { useAppointments } from '../../context/AppointmentContext';
 import HolidayForm from './HolidayForm';
 import BlockedTimeForm from './BlockedTimeForm';
 import { Holiday, BlockedTime } from '../../types';
+import { toast } from 'react-toastify';
 
 const AdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'holidays' | 'blockedTimes'>('holidays');
   const { holidays, blockedTimes, removeHoliday, removeBlockedTime, createBlockedTime } = useAppointments();
   
-  const handleBlockTime = async (selectedDate: Date | null, selectedTime: string | null, reason: string) => {
-    if (!selectedDate || !selectedTime) return;
+  const handleBlockTime = async (selectedDate: Date, selectedTimes: string[], reason: string) => {
+    if (!selectedDate || selectedTimes.length === 0) {
+      console.error('Date and times are required');
+      return;
+    }
 
-    await createBlockedTime({
-      date: selectedDate,
-      time: selectedTime,
-      reason: reason,
-    });
+    try {
+      await createBlockedTime({
+        date: selectedDate,
+        timeSlots: selectedTimes,
+        reason: reason.trim()
+      });
+      toast.success('Horarios bloqueados correctamente');
+    } catch (error) {
+      console.error('Error blocking times:', error);
+      toast.error('Error al bloquear los horarios');
+    }
   };
 
   return (
@@ -103,7 +113,6 @@ interface HolidayCardProps {
   holiday: Holiday;
   onDelete: (id: string) => void;
 }
-
 const HolidayCard: React.FC<HolidayCardProps> = ({ holiday, onDelete }) => {
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -133,7 +142,6 @@ interface BlockedTimeCardProps {
   blockedTime: BlockedTime;
   onDelete: (id: string) => void;
 }
-
 const BlockedTimeCard: React.FC<BlockedTimeCardProps> = ({ blockedTime, onDelete }) => {
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -146,11 +154,14 @@ const BlockedTimeCard: React.FC<BlockedTimeCardProps> = ({ blockedTime, onDelete
               {format(blockedTime.date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
             </p>
             <div className="mt-1 flex flex-wrap gap-1">
-              <span
-                className="inline-block bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded"
-              >
-                {blockedTime.time}
-              </span>
+              {blockedTime.timeSlots?.map((time, index) => (
+                <span
+                  key={index}
+                  className="inline-block bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded"
+                >
+                  {time}
+                </span>
+              ))}
             </div>
           </div>
         </div>

@@ -48,44 +48,40 @@ export const isHolidayDate = (date: Date): boolean => {
 
 // Función mejorada para verificar disponibilidad
 export const isTimeSlotAvailable = (date: Date, time: string): boolean => {
-  // Primero verifica si es feriado
+  // Verifica si es feriado
   if (isHolidayDate(date)) {
     return false;
   }
-  
-  // Verifica si el horario está bloqueado
+
+  // Verifica horarios bloqueados
   const isBlocked = blockedTimes.some(block => {
-    // Normaliza las fechas para comparar solo año, mes y día
-    const blockDate = new Date(block.date);
-    const targetDate = new Date(date);
-    
     const sameDate = 
-      blockDate.getFullYear() === targetDate.getFullYear() && 
-      blockDate.getMonth() === targetDate.getMonth() && 
-      blockDate.getDate() === targetDate.getDate();
-    
-    // Verifica si el horario está en la lista de horarios bloqueados
-    const timeBlocked = Array.isArray(block.timeSlots) && 
-      block.timeSlots.includes(time);
-    
-    return sameDate && timeBlocked;
+      block.date.getFullYear() === date.getFullYear() &&
+      block.date.getMonth() === date.getMonth() &&
+      block.date.getDate() === date.getDate();
+
+    // Verifica si el horario está en el array de timeSlots
+    return sameDate && (
+      block.timeSlots?.includes(time) || 
+      block.time === time
+    );
   });
-  
-  if (isBlocked) return false;
-  
-  // Verifica si ya hay una cita
+
+  if (isBlocked) {
+    return false;
+  }
+
+  // Verifica si ya hay una cita existente
   const isBooked = appointments.some(appointment => {
     const appointmentDate = new Date(appointment.date);
-    const targetDate = new Date(date);
-    
     const sameDate = 
-      appointmentDate.getFullYear() === targetDate.getFullYear() && 
-      appointmentDate.getMonth() === targetDate.getMonth() && 
-      appointmentDate.getDate() === targetDate.getDate();
+      appointmentDate.getFullYear() === date.getFullYear() &&
+      appointmentDate.getMonth() === date.getMonth() &&
+      appointmentDate.getDate() === date.getDate();
     
     return sameDate && appointment.time === time;
   });
-  
+
   return !isBooked;
 };
 
