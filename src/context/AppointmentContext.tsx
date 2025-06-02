@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../utils/whatsapp';
-import toast from 'react-hot-toast';
 
 interface AppointmentContextType {
   appointments: Appointment[];
@@ -10,7 +9,7 @@ interface AppointmentContextType {
   blockedTimes: BlockedTime[];
   userPhone: string | null;
   createAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<Appointment>;
-  createHoliday: (date: Date, description: string) => Promise<Holiday>;
+  createHoliday: (holiday: Omit<Holiday, 'id'>) => Promise<Holiday>;
   createBlockedTime: (blockedTime: Omit<BlockedTime, 'id'>) => Promise<BlockedTime>;
   deleteAppointment: (id: string) => Promise<void>;
   removeHoliday: (id: string) => Promise<void>;
@@ -87,11 +86,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     setBlockedTimes(data.map(block => ({
       ...block,
-      date: new Date(block.date),
-      // Si timeSlots es string, conviértelo a array, si ya es array déjalo como está
-      timeSlots: typeof block.timeSlots === 'string' 
-        ? block.timeSlots.split(',')
-        : block.timeSlots || [block.time]
+      date: new Date(block.date)
     })));
   };
 
@@ -116,105 +111,40 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     return newAppointment;
   };
 
-  const createHoliday = async (date: Date, description: string): Promise<Holiday> => {
-    try {
-      // Check if holiday already exists before inserting
-      const { data: existingHoliday } = await supabase
-        .from('holidays')
-        .select()
-        .eq('date', date.toISOString().split('T')[0])
-        .single();
+  const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
+    const { data, error } = await supabase
+      .from('holidays')
+      .insert([holidayData])
+      .select()
+      .single();
 
-      if (existingHoliday) {
-        toast.error('Ya existe un feriado para esa fecha');
-        throw new Error('Holiday already exists');
-      }
+    if (error) throw error;
 
-      const { data, error } = await supabase
-        .from('holidays')
-        .insert([{ 
-          date: date.toISOString().split('T')[0], 
-          description 
-        }])
-        .select()
-        .single();
+    const newHoliday = {
+      ...data,
+      date: new Date(data.date)
+    };
 
-      if (error) {
-        console.error('Error creating holiday:', error);
-        toast.error('Error al agregar feriado');
-        throw error;
-      }
-
-      const newHoliday: Holiday = {
-        ...data,
-        date: new Date(data.date)
-      };
-
-      setHolidays(prev => [...prev, newHoliday]);
-      toast.success('Feriado agregado correctamente');
-      return newHoliday;
-
-    } catch (err) {
-      // Only show error toast if it's not the "already exists" error
-      if (!(err instanceof Error) || err.message !== 'Holiday already exists') {
-        toast.error('Error al agregar feriado');
-      }
-      throw err;
-    }
+    setHolidays(prev => [...prev, newHoliday]);
+    return newHoliday;
   };
 
-  const createBlockedTime = async (blockedTime: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
-    try {
-      // Validación más robusta de timeSlots
-      if (!blockedTime?.timeSlots || !Array.isArray(blockedTime.timeSlots) || blockedTime.timeSlots.length === 0) {
-        console.error('TimeSlots invalid:', blockedTime);
-        toast.error('Debe seleccionar al menos un horario');
-        throw new Error('No time slots selected');
-      }
+  const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
+    const { data, error } = await supabase
+      .from('blocked_times')
+      .insert([blockedTimeData])
+      .select()
+      .single();
 
-      // Log para debugging
-      console.log('Creating blocked time:', {
-        date: blockedTime.date,
-        timeSlots: blockedTime.timeSlots,
-        reason: blockedTime.reason
-      });
+    if (error) throw error;
 
-      const { data, error } = await supabase
-        .from('blocked_times')
-        .insert([{
-          date: blockedTime.date.toISOString().split('T')[0],
-          time: blockedTime.timeSlots[0], // Primer horario para compatibilidad
-          timeSlots: blockedTime.timeSlots, // Array de horarios
-          reason: blockedTime.reason || ''
-        }])
-        .select()
-        .single();
+    const newBlockedTime = {
+      ...data,
+      date: new Date(data.date)
+    };
 
-      if (error) {
-        console.error('Error creating blocked time:', error);
-        toast.error('Error al bloquear el horario');
-        throw error;
-      }
-
-      if (!data) {
-        throw new Error('No data returned from insert');
-      }
-
-      const newBlockedTime: BlockedTime = {
-        ...data,
-        date: new Date(data.date),
-        timeSlots: data.timeSlots || [data.time] // Fallback a time si timeSlots es null
-      };
-
-      setBlockedTimes(prev => [...prev, newBlockedTime]);
-      toast.success('Horarios bloqueados correctamente');
-      return newBlockedTime;
-
-    } catch (err) {
-      console.error('Error in createBlockedTime:', err);
-      toast.error('Error al bloquear el horario');
-      throw err;
-    }
+    setBlockedTimes(prev => [...prev, newBlockedTime]);
+    return newBlockedTime;
   };
 
   const deleteAppointment = async (id: string): Promise<void> => {

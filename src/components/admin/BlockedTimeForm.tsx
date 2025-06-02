@@ -8,49 +8,57 @@ import { generateTimeSlots } from '../../utils/businessHours';
 import toast from 'react-hot-toast';
 
 interface BlockedTimeFormProps {
-  onBlockTime: (date: Date, selectedTimes: string[], reason: string) => Promise<void>;
+  onBlockTime: (date: Date | null, time: string | null, reason: string) => void;
 }
 
 const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
-  const [date, setDate] = useState<Date>(new Date());
+  const [date, setDate] = useState<Date | null>(null);
   const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
   const [reason, setReason] = useState('');
-
+  
+  const { createBlockedTime } = useAppointments();
+  
   const handleTimeToggle = (time: string) => {
-    setSelectedTimes(prev => {
-      if (prev.includes(time)) {
-        return prev.filter(t => t !== time);
-      } else {
-        return [...prev, time].sort();
-      }
-    });
+    if (selectedTimes.includes(time)) {
+      setSelectedTimes(selectedTimes.filter(t => t !== time));
+    } else {
+      setSelectedTimes([...selectedTimes, time]);
+    }
   };
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!date) {
-      toast.error('Selecciona una fecha');
+      toast.error('Por favor selecciona una fecha');
       return;
     }
 
     if (selectedTimes.length === 0) {
-      toast.error('Selecciona al menos un horario');
+      toast.error('Por favor selecciona al menos un horario');
       return;
     }
 
-    try {
-      await onBlockTime(date, selectedTimes, reason);
-      
-      toast.success('Horarios bloqueados exitosamente');
-      
-      // Limpiar el formulario
-      setSelectedTimes([]);
-      setReason('');
-      
-    } catch (error) {
-      console.error('Error in form submission:', error);
+    if (!reason.trim()) {
+      toast.error('Por favor ingresa un motivo');
+      return;
     }
+
+    // Guarda cada horario como un registro separado
+    for (const time of selectedTimes) {
+      await createBlockedTime({
+        date,
+        time,
+        reason
+      });
+    }
+
+    toast.success('Horarios bloqueados exitosamente');
+
+    // Reset form
+    setDate(null);
+    setSelectedTimes([]);
+    setReason('');
   };
   
   const availableTimeSlots = date ? generateTimeSlots(date) : [];
