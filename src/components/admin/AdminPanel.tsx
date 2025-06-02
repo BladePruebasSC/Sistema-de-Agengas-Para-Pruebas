@@ -9,8 +9,18 @@ import { Holiday, BlockedTime } from '../../types';
 
 const AdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'holidays' | 'blockedTimes'>('holidays');
-  const { holidays, blockedTimes, removeHoliday, removeBlockedTime } = useAppointments();
+  const { holidays, blockedTimes, removeHoliday, removeBlockedTime, createBlockedTime } = useAppointments();
   
+  const handleBlockTime = async (selectedDate: Date | null, selectedTime: string | null, reason: string) => {
+    if (!selectedDate || !selectedTime) return;
+
+    await createBlockedTime({
+      date: selectedDate,
+      time: selectedTime,
+      reason: reason,
+    });
+  };
+
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="p-6">
@@ -63,7 +73,7 @@ const AdminPanel: React.FC = () => {
           </div>
         ) : (
           <div>
-            <BlockedTimeForm />
+            <BlockedTimeForm onBlockTime={handleBlockTime} />
             
             <div className="mt-8">
               <h3 className="text-lg font-medium mb-4">Horarios Bloqueados</h3>
@@ -136,14 +146,11 @@ const BlockedTimeCard: React.FC<BlockedTimeCardProps> = ({ blockedTime, onDelete
               {format(blockedTime.date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
             </p>
             <div className="mt-1 flex flex-wrap gap-1">
-              {blockedTime.timeSlots.map((time) => (
-                <span
-                  key={time}
-                  className="inline-block bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded"
-                >
-                  {time}
-                </span>
-              ))}
+              <span
+                className="inline-block bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded"
+              >
+                {blockedTime.time}
+              </span>
             </div>
           </div>
         </div>

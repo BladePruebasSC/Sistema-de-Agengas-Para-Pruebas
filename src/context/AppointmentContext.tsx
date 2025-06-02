@@ -105,6 +105,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     };
 
     setAppointments(prev => [...prev, newAppointment]);
+    setUserPhone(newAppointment.clientPhone); // <-- Agrega esta línea
     await notifyAppointmentCreated(newAppointment);
 
     return newAppointment;

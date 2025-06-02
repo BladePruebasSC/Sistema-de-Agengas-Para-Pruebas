@@ -7,7 +7,11 @@ import { useAppointments } from '../../context/AppointmentContext';
 import { generateTimeSlots } from '../../utils/businessHours';
 import toast from 'react-hot-toast';
 
-const BlockedTimeForm: React.FC = () => {
+interface BlockedTimeFormProps {
+  onBlockTime: (date: Date | null, time: string | null, reason: string) => void;
+}
+
+const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
   const [date, setDate] = useState<Date | null>(null);
   const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
   const [reason, setReason] = useState('');
@@ -22,32 +26,35 @@ const BlockedTimeForm: React.FC = () => {
     }
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!date) {
       toast.error('Por favor selecciona una fecha');
       return;
     }
-    
+
     if (selectedTimes.length === 0) {
       toast.error('Por favor selecciona al menos un horario');
       return;
     }
-    
+
     if (!reason.trim()) {
       toast.error('Por favor ingresa un motivo');
       return;
     }
-    
-    createBlockedTime({
-      date,
-      timeSlots: selectedTimes,
-      reason
-    });
-    
+
+    // Guarda cada horario como un registro separado
+    for (const time of selectedTimes) {
+      await createBlockedTime({
+        date,
+        time,
+        reason
+      });
+    }
+
     toast.success('Horarios bloqueados exitosamente');
-    
+
     // Reset form
     setDate(null);
     setSelectedTimes([]);
