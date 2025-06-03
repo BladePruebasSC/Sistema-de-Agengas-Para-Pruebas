@@ -55,13 +55,74 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     return localStorage.getItem('userPhone');
   });
 
+  const fetchAppointments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (error) throw error;
+
+      const formattedAppointments = data.map(appointment => ({
+        ...appointment,
+        date: new Date(appointment.date)
+      }));
+
+      setAppointments(formattedAppointments);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      toast.error('Error al cargar las citas');
+    }
+  };
+
+  const fetchHolidays = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('holidays')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (error) throw error;
+
+      const formattedHolidays = data.map(holiday => ({
+        ...holiday,
+        date: new Date(holiday.date)
+      }));
+
+      setHolidays(formattedHolidays);
+    } catch (error) {
+      console.error('Error fetching holidays:', error);
+      toast.error('Error al cargar los feriados');
+    }
+  };
+
+  const fetchBlockedTimes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('blocked_times')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (error) throw error;
+
+      const formattedBlockedTimes = data.map(blockedTime => ({
+        ...blockedTime,
+        date: new Date(blockedTime.date)
+      }));
+
+      setBlockedTimes(formattedBlockedTimes);
+    } catch (error) {
+      console.error('Error fetching blocked times:', error);
+      toast.error('Error al cargar los horarios bloqueados');
+    }
+  };
+
   useEffect(() => {
     fetchAppointments();
     fetchHolidays();
     fetchBlockedTimes();
   }, []);
-
-  // ... (mantener los métodos fetch existentes)
 
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
     try {
