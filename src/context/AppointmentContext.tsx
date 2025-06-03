@@ -2,6 +2,10 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import { formatPhoneForWhatsApp, formatPhoneForDisplay } from '../utils/phoneUtils';
+import { sendWhatsAppMessage, sendMassNotification } from '../services/twilioService';
+import type { TwilioMessageData } from '../types/twilio';
+import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
 
 interface AppointmentContextType {
   appointments: Appointment[];
@@ -15,6 +19,7 @@ interface AppointmentContextType {
   createBlockedTime: (blockedTimeData: Omit<BlockedTime, 'id'>) => Promise<BlockedTime>;
   removeHoliday: (id: string) => Promise<void>;
   removeBlockedTime: (id: string) => Promise<void>;
+  isTimeSlotAvailable: (date: Date, time: string) => Promise<boolean>;
 }
 
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
@@ -28,23 +33,36 @@ export const useAppointments = () => {
 };
 
 const notifyWhatsApp = async (type: string, data: any) => {
-  try {
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({ type, data })
-    });
+    try {
+        const response = await fetch('http://localhost:3000/send-message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                type,
+                phone: data.clientPhone || data.phone,
+                data: {
+                    ...data,
+                    date: new Date(data.date).toLocaleDateString('es-ES'),
+                }
+            })
+        });
 
-    if (!response.ok) {
-      throw new Error('Error al enviar notificación de WhatsApp');
+        if (!response.ok) {
+            throw new Error('Error enviando mensaje de WhatsApp');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error en notificación WhatsApp:', error);
+        return null;
     }
-  } catch (error) {
-    console.error('Error en notifyWhatsApp:', error);
-    throw error;
-  }
+};
+
+const getAllRegisteredPhones = (appointments: Appointment[]): string[] => {
+  const phones = new Set(appointments.map(app => app.clientPhone));
+  return Array.from(phones);
 };
 
 export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -62,16 +80,25 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         .select('*')
         .order('date', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching appointments:', error);
+        throw error;
+      }
 
-      const formattedAppointments = data.map(appointment => ({
-        ...appointment,
-        date: new Date(appointment.date)
-      }));
+      const formattedAppointments = data.map(appointment => {
+        console.log('Fecha de BD:', appointment.date);
+        const parsedDate = parseSupabaseDate(appointment.date);
+        console.log('Fecha parseada:', parsedDate);
+        
+        return {
+          ...appointment,
+          date: parsedDate
+        };
+      });
 
       setAppointments(formattedAppointments);
     } catch (error) {
-      console.error('Error fetching appointments:', error);
+      console.error('Error in fetchAppointments:', error);
       toast.error('Error al cargar las citas');
     }
   };
@@ -124,140 +151,469 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchBlockedTimes();
   }, []);
 
+  const isTimeSlotAvailable = async (date: Date, time: string): Promise<boolean> => {
+    try {
+        const formattedDate = date.toISOString().split('T')[0];
+
+        // Verificar si hay una cita existente para esta fecha y hora específica
+        const { data: existingAppointments, error } = await supabase
+            .from('appointments')
+            .select('*')
+            .eq('date', formattedDate)
+            .eq('time', time);
+
+        if (error) {
+            console.error('Error checking appointments:', error);
+            throw error;
+        }
+
+        // Si hay alguna cita a esta hora específica, el horario no está disponible
+        if (existingAppointments && existingAppointments.length > 0) {
+            console.log(`Hora ${time} en fecha ${formattedDate} no disponible - cita existente`);
+            return false;
+        }
+
+        // Verificar si es un día feriado
+        const { data: holiday } = await supabase
+            .from('holidays')
+            .select('*')
+            .eq('date', formattedDate)
+            .maybeSingle();
+
+        if (holiday) {
+            console.log(`Fecha ${formattedDate} no disponible - día feriado`);
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error checking time slot availability:', error);
+        throw error;
+    }
+  };
+
+  const formatPhoneNumber = (phone: string): string => {
+    return `+1${phone.replace(/\D/g, '')}`;
+  };
+
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
     try {
+      // Asegurarnos de que la fecha esté en UTC-4 (Santo Domingo)
+      const formattedDate = formatDateForSupabase(appointmentData.date);
+      
+      console.log('Fecha original:', appointmentData.date);
+      console.log('Fecha formateada para Supabase:', formattedDate);
+      
       const { data, error } = await supabase
         .from('appointments')
-        .insert([appointmentData])
+        .insert([{
+          ...appointmentData,
+          date: formattedDate // Ya está en el formato correcto para Supabase
+        }])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error('Error al crear la cita');
+      }
 
-      const newAppointment = { ...data, date: new Date(data.date) };
+      // Parsear la fecha de vuelta a un objeto Date
+      const newAppointment = { 
+        ...data, 
+        date: parseSupabaseDate(data.date)
+      };
+      
+      console.log('Fecha parseada:', newAppointment.date);
+      
       setAppointments(prev => [...prev, newAppointment]);
 
-      // Notificar por WhatsApp
-      await notifyWhatsApp('appointment_created', { appointment: newAppointment });
+      // Enviar mensaje de confirmación
+      try {
+        await sendWhatsAppMessage(
+          appointmentData.clientPhone,
+          'appointment_created',
+          {
+            clientName: appointmentData.clientName,
+            date: newAppointment.date.toLocaleDateString('es-ES'),
+            time: appointmentData.time,
+            service: appointmentData.service
+          }
+        );
+      } catch (msgError) {
+        console.error('Error sending WhatsApp message:', msgError);
+      }
 
+      toast.success('Cita creada exitosamente');
       return newAppointment;
     } catch (error) {
-      console.error('Error al crear cita:', error);
+      console.error('Error in createAppointment:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al crear la cita');
       throw error;
     }
   };
 
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
     try {
+      const formattedDate = formatDateForSupabase(holidayData.date);
+      
+      // Verificar si ya existe un feriado
+      const { data: existingHoliday } = await supabase
+          .from('holidays')
+          .select('*')
+          .eq('date', formattedDate)
+          .single();
+
+      if (existingHoliday) {
+          toast.error('Ya existe un feriado en esta fecha');
+          throw new Error('Ya existe un feriado en esta fecha');
+      }
+
       const { data, error } = await supabase
-        .from('holidays')
-        .insert([holidayData])
-        .select()
-        .single();
+          .from('holidays')
+          .insert([{ ...holidayData, date: formattedDate }])
+          .select()
+          .single();
 
       if (error) throw error;
 
-      const newHoliday = { ...data, date: new Date(data.date) };
+      const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
       setHolidays(prev => [...prev, newHoliday]);
 
-      // Notificar por WhatsApp
-      await notifyWhatsApp('holiday_created', { holiday: newHoliday });
+      // Enviar notificación a todos los clientes registrados
+      try {
+          const phones = appointments.map(app => app.clientPhone);
+          const uniquePhones = [...new Set(phones)]; // Eliminar duplicados
+          let messagesSent = 0;
 
+          // Enviar mensajes uno por uno, con límite
+          for (const phone of uniquePhones) {
+              if (messagesSent >= 9) {
+                  console.log('Límite de mensajes diarios alcanzado');
+                  break;
+              }
+
+              try {
+                  await sendWhatsAppMessage(
+                      phone,
+                      'holiday_added',
+                      {
+                          date: newHoliday.date.toLocaleDateString('es-ES')
+                      }
+                  );
+                  messagesSent++;
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+              } catch (error) {
+                  if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
+                      console.log('Límite de mensajes diarios alcanzado');
+                      break;
+                  }
+                  console.error(`Error sending message to ${phone}:`, error);
+              }
+          }
+
+          // Si no se pudieron enviar todos los mensajes, mostrar una notificación
+          if (messagesSent < uniquePhones.length) {
+              toast('No se pudieron enviar todos los mensajes - Límite diario alcanzado', {
+                  icon: '⚠️'
+              });
+          }
+      } catch (msgError) {
+          console.error('Error sending holiday notifications:', msgError);
+          toast('No se pudieron enviar las notificaciones', {
+              icon: '⚠️'
+          });
+      }
+
+      toast.success('Feriado agregado exitosamente');
       return newHoliday;
     } catch (error) {
-      console.error('Error al crear feriado:', error);
+      console.error('Error creating holiday:', error);
+      if (error instanceof Error) {
+          toast.error(error.message);
+      } else {
+          toast.error('Error al crear el feriado');
+      }
       throw error;
     }
   };
 
   const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
     try {
-      const { data, error } = await supabase
-        .from('blocked_times')
-        .insert([blockedTimeData])
-        .select()
-        .single();
+        const formattedDate = formatDateForSupabase(blockedTimeData.date);
+        
+        const { data, error } = await supabase
+            .from('blocked_times')
+            .insert([{
+                ...blockedTimeData,
+                date: formattedDate,
+                time: blockedTimeData.timeSlots?.[0] || '',
+                timeSlots: blockedTimeData.timeSlots || [blockedTimeData.time]
+            }])
+            .select()
+            .single();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const newBlockedTime = { ...data, date: new Date(data.date) };
-      setBlockedTimes(prev => [...prev, newBlockedTime]);
+        const newBlockedTime = { 
+            ...data, 
+            date: parseSupabaseDate(data.date),
+            time: data.time || data.timeSlots?.[0] || '',
+            timeSlots: data.timeSlots || [data.time]
+        };
 
-      // Notificar por WhatsApp
-      await notifyWhatsApp('time_blocked', { blockedTime: newBlockedTime });
+        setBlockedTimes(prev => [...prev, newBlockedTime]);
 
-      return newBlockedTime;
+        // Enviar notificación a todos los clientes registrados
+        try {
+            const phones = appointments.map(app => app.clientPhone);
+            const uniquePhones = [...new Set(phones)];
+            let messagesSent = 0;
+
+            // Enviar mensajes uno por uno, con límite
+            for (const phone of uniquePhones) {
+                if (messagesSent >= 9) {
+                    toast('Límite de mensajes diarios alcanzado', {
+                        icon: '⚠️',
+                        duration: 4000
+                    });
+                    break;
+                }
+
+                try {
+                    await sendWhatsAppMessage(
+                        phone,
+                        'time_blocked',
+                        {
+                            date: newBlockedTime.date.toLocaleDateString('es-ES'),
+                            time: newBlockedTime.time
+                        }
+                    );
+                    messagesSent++;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
+                        break;
+                    }
+                    console.error(`Error sending message to ${phone}:`, error);
+                }
+            }
+
+            if (messagesSent < uniquePhones.length) {
+                toast('No se pudieron enviar todas las notificaciones - Límite diario alcanzado', {
+                    icon: '⚠️',
+                    duration: 4000
+                });
+            }
+        } catch (msgError) {
+            console.error('Error sending blocked time notifications:', msgError);
+            toast('Error al enviar notificaciones', {
+                icon: '⚠️',
+                duration: 4000
+            });
+        }
+
+        toast.success('Horario bloqueado exitosamente');
+        return newBlockedTime;
     } catch (error) {
-      console.error('Error al bloquear horario:', error);
-      throw error;
+        console.error('Error creating blocked time:', error);
+        toast.error('Error al bloquear el horario');
+        throw error;
     }
   };
 
   const deleteAppointment = async (id: string): Promise<void> => {
     try {
-      // Obtener la cita antes de eliminarla
-      const appointment = appointments.find(app => app.id === id);
-      if (!appointment) {
-        throw new Error('Cita no encontrada');
-      }
+        const appointmentToDelete = appointments.find(app => app.id === id);
+        if (!appointmentToDelete) {
+            throw new Error('Cita no encontrada');
+        }
 
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .eq('id', id);
+        // Primero eliminamos de la base de datos
+        const { error } = await supabase
+            .from('appointments')
+            .delete()
+            .eq('id', id);
 
-      if (error) throw error;
+        if (error) {
+            console.error('Error deleting from database:', error);
+            toast.error('Error al cancelar la cita');
+            throw error;
+        }
 
-      // Actualizar estado local
-      setAppointments(prev => prev.filter(app => app.id !== id));
+        // Actualizar el estado local
+        setAppointments(prev => prev.filter(app => app.id !== id));
 
-      // Notificar por WhatsApp
-      await notifyWhatsApp('appointment_cancelled', { 
-        appointment,
-        availableSlot: true
-      });
-
-      toast.success('Cita cancelada exitosamente');
+        // Intentar enviar la notificación
+        try {
+            await sendWhatsAppMessage(
+                appointmentToDelete.clientPhone,
+                'appointment_cancelled',
+                {
+                    clientName: appointmentToDelete.clientName,
+                    date: appointmentToDelete.date.toLocaleDateString('es-ES'),
+                    time: appointmentToDelete.time
+                }
+            );
+            toast.success('Cita cancelada exitosamente');
+        } catch (msgError) {
+            console.error('Error al enviar notificación:', msgError);
+            toast.success('Cita cancelada exitosamente (sin notificación)');
+        }
     } catch (error) {
-      console.error('Error al eliminar cita:', error);
-      toast.error('Error al cancelar la cita');
-      throw error;
+        if (error instanceof Error && !error.message.includes('exceeded the 9 daily messages limit')) {
+            toast.error('Error al cancelar la cita');
+        }
     }
-  };
+};
 
   const removeHoliday = async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase
-        .from('holidays')
-        .delete()
-        .eq('id', id);
+        const holidayToRemove = holidays.find(h => h.id === id);
+        if (!holidayToRemove) {
+            throw new Error('Feriado no encontrado');
+        }
 
-      if (error) throw error;
+        // Primero eliminamos de la base de datos
+        const { error } = await supabase
+            .from('holidays')
+            .delete()
+            .eq('id', id);
 
-      setHolidays(prev => prev.filter(holiday => holiday.id !== id));
-      toast.success('Feriado eliminado exitosamente');
+        if (error) {
+            console.error('Error Supabase:', error);
+            throw new Error('Error al eliminar el feriado de la base de datos');
+        }
+
+        // Si la eliminación fue exitosa, notificamos
+        try {
+            const phones = appointments.map(app => app.clientPhone);
+            const uniquePhones = [...new Set(phones)]; // Eliminar duplicados
+            let messagesSent = 0;
+
+            // Enviar mensajes uno por uno, con límite
+            for (const phone of uniquePhones) {
+                if (messagesSent >= 9) {
+                    toast('Límite de mensajes diarios alcanzado', {
+                        icon: '⚠️',
+                        duration: 4000
+                    });
+                    break;
+                }
+
+                try {
+                    await sendWhatsAppMessage(
+                        phone,
+                        'holiday_removed',
+                        {
+                            date: new Date(holidayToRemove.date).toLocaleDateString('es-ES')
+                        }
+                    );
+                    messagesSent++;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
+                        break;
+                    }
+                    console.error(`Error sending message to ${phone}:`, error);
+                }
+            }
+
+            // Si no se pudieron enviar todos los mensajes
+            if (messagesSent < uniquePhones.length) {
+                toast('No se pudieron enviar todas las notificaciones - Límite diario alcanzado', {
+                    icon: '⚠️',
+                    duration: 4000
+                });
+            }
+        } catch (msgError) {
+            console.error('Error enviando notificaciones:', msgError);
+            toast('Error al enviar notificaciones', {
+                icon: '⚠️',
+                duration: 4000
+            });
+        }
+
+        // Actualizar el estado local
+        setHolidays(prev => prev.filter(h => h.id !== id));
+        toast.success('Feriado eliminado exitosamente');
     } catch (error) {
-      console.error('Error al eliminar feriado:', error);
-      toast.error('Error al eliminar el feriado');
-      throw error;
+        console.error('Error removing holiday:', error);
+        toast.error(error instanceof Error ? error.message : 'Error al eliminar el feriado');
+        throw error;
     }
   };
 
   const removeBlockedTime = async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase
-        .from('blocked_times')
-        .delete()
-        .eq('id', id);
+        const blockedTimeToRemove = blockedTimes.find(bt => bt.id === id);
+        if (!blockedTimeToRemove) {
+            throw new Error('Horario bloqueado no encontrado');
+        }
 
-      if (error) throw error;
+        const { error } = await supabase
+            .from('blocked_times')
+            .delete()
+            .eq('id', id);
 
-      setBlockedTimes(prev => prev.filter(block => block.id !== id));
-      toast.success('Horario desbloqueado exitosamente');
+        if (error) {
+            console.error('Error Supabase:', error);
+            throw new Error('Error al eliminar el horario bloqueado');
+        }
+
+        try {
+            const phones = appointments.map(app => app.clientPhone);
+            const uniquePhones = [...new Set(phones)];
+            let messagesSent = 0;
+
+            for (const phone of uniquePhones) {
+                if (messagesSent >= 9) {
+                    toast('Límite de mensajes diarios alcanzado', {
+                        icon: '⚠️',
+                        duration: 4000
+                    });
+                    break;
+                }
+
+                try {
+                    await sendWhatsAppMessage(
+                        phone,
+                        'time_unblocked',
+                        {
+                            date: new Date(blockedTimeToRemove.date).toLocaleDateString('es-ES'),
+                            time: blockedTimeToRemove.time
+                        }
+                    );
+                    messagesSent++;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
+                        break;
+                    }
+                    console.error(`Error sending message to ${phone}:`, error);
+                }
+            }
+
+            if (messagesSent < uniquePhones.length) {
+                toast('No se pudieron enviar todas las notificaciones - Límite diario alcanzado', {
+                    icon: '⚠️',
+                    duration: 4000
+                });
+            }
+        } catch (msgError) {
+            console.error('Error enviando notificaciones:', msgError);
+            toast('Error al enviar notificaciones', {
+                icon: '⚠️',
+                duration: 4000
+            });
+        }
+
+        setBlockedTimes(prev => prev.filter(bt => bt.id !== id));
+        toast.success('Horario desbloqueado exitosamente');
     } catch (error) {
-      console.error('Error al desbloquear horario:', error);
-      toast.error('Error al desbloquear el horario');
-      throw error;
+        console.error('Error removing blocked time:', error);
+        toast.error(error instanceof Error ? error.message : 'Error al desbloquear el horario');
+        throw error;
     }
   };
 
@@ -279,6 +635,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       createBlockedTime,
       removeHoliday,
       removeBlockedTime,
+      isTimeSlotAvailable,
     }}>
       {children}
     </AppointmentContext.Provider>

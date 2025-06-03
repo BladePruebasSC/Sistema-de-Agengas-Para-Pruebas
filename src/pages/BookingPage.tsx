@@ -1,15 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import CalendarView from '../components/Calendar/CalendarView';
 import BookingForm from '../components/BookingForm';
 import toast from 'react-hot-toast';
+import { useAppointments } from '../context/AppointmentContext';
 
 const BookingPage: React.FC = () => {
+  const { isTimeSlotAvailable } = useAppointments();
+  const [availableHours, setAvailableHours] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string>('');
   const [bookingStep, setBookingStep] = useState<'select' | 'confirm'>('select');
-  
+
+  const allHours = [
+    '7:00 AM',
+    '8:00 AM',
+    '9:00 AM',
+    '10:00 AM',
+    '11:00 AM',
+    '3:00 PM',
+    '4:00 PM',
+    '5:00 PM',
+    '6:00 PM',
+    '7:00 PM'
+  ];
+
+  // Verificar disponibilidad cuando cambie la fecha
+  const checkAvailableHours = useCallback(async (date: Date) => {
+    setIsLoading(true);
+    try {
+      const availableSlots = [];
+      for (const hour of allHours) {
+        const isAvailable = await isTimeSlotAvailable(date, hour);
+        if (isAvailable) {
+          availableSlots.push(hour);
+        }
+      }
+      setAvailableHours(availableSlots);
+    } catch (error) {
+      console.error('Error checking available hours:', error);
+      toast.error('Error al verificar horarios disponibles');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isTimeSlotAvailable, allHours]);
+
+  // Actualizar horas disponibles cuando cambie la fecha
+  useEffect(() => {
+    if (selectedDate) {
+      checkAvailableHours(selectedDate);
+    }
+  }, [selectedDate, checkAvailableHours]);
+
   const handleDateTimeSelected = (date: Date, time: string) => {
     setSelectedDate(date);
     setSelectedTime(time);
@@ -17,7 +61,7 @@ const BookingPage: React.FC = () => {
   
   const handleBookingSuccess = () => {
     setSelectedDate(null);
-    setSelectedTime(null);
+    setSelectedTime('');
     setBookingStep('select');
   };
   
@@ -27,34 +71,20 @@ const BookingPage: React.FC = () => {
   
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-2">Agenda tu Cita</h1>
-      <p className="text-gray-600 mb-6">
-        Selecciona tu fecha y hora preferida para tu próxima visita.
-      </p>
+      <h1 className="text-3xl font-bold mb-6">Agenda tu Cita</h1>
       
-      {bookingStep === 'select' ? (
-        <div>
-          <CalendarView
-            onDateTimeSelected={handleDateTimeSelected}
-            selectedDate={selectedDate}
-            selectedTime={selectedTime}
-            onDateChange={setSelectedDate}
-            onTimeChange={setSelectedTime}
-          />
-          
-          {selectedDate && selectedTime && (
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setBookingStep('confirm')}
-                className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-6 rounded-md shadow transition duration-200 ease-in-out transform hover:scale-105"
-              >
-                Continuar con la Reserva
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div>
+      {/* Calendario y Selector de Hora */}
+      <CalendarView
+        onDateTimeSelected={handleDateTimeSelected}
+        selectedDate={selectedDate}
+        selectedTime={selectedTime}
+        onDateChange={setSelectedDate}
+        onTimeChange={setSelectedTime}
+      />
+
+      {/* Formulario de reserva */}
+      {selectedDate && selectedTime && (
+        <div className="mt-8">
           <div className="flex justify-between items-center mb-4">
             <button
               onClick={handleCancelBooking}

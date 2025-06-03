@@ -6,16 +6,18 @@ import { generateTimeSlots, formatTime, isBusinessHour } from '../../utils/busin
 
 interface TimeSlotPickerProps {
   date: Date;
-  selectedTime: string | null;
   onSelectTime: (time: string) => void;
+  selectedTime: string | null;
   isHoliday: boolean;
+  availableHours: string[]; // Añadir esta prop
 }
 
 const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({ 
   date, 
-  selectedTime, 
   onSelectTime,
-  isHoliday
+  selectedTime, 
+  isHoliday,
+  availableHours
 }) => {
   const { blockedTimes, appointments } = useAppointments();
   
@@ -68,42 +70,34 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
     );
   }
   
+  const allHours = [
+    '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
+    '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
+  ];
+
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-      {allTimeSlots.map((time) => {
-        const available = isTimeSlotAvailable(time);
-        const isValid = isBusinessHour(date, time);
-        
-        let className = "time-slot p-2 rounded-md text-center cursor-pointer";
-        let statusText = "";
-        
-        if (selectedTime === time) {
-          className += " selected";
-          statusText = "Seleccionado";
-        } else if (!isValid) {
-          className += " non-business";
-          statusText = "No disponible";
-        } else if (!available) {
-          className += " booked";
-          statusText = "Ocupado";
-        } else {
-          className += " available";
-          statusText = "Disponible";
-        }
-        
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      {allHours.map((hour) => {
+        const isAvailable = availableHours.includes(hour);
         return (
-          <div
-            key={time}
-            className={className}
-            onClick={() => {
-              if (isValid && available) {
-                onSelectTime(time);
-              }
-            }}
-            title={statusText}
+          <button
+            key={hour}
+            onClick={() => isAvailable && onSelectTime(hour)}
+            disabled={!isAvailable || isHoliday}
+            className={`
+              p-3 rounded-lg text-center transition-all
+              ${selectedTime === hour 
+                ? 'bg-red-600 text-white' 
+                : isAvailable && !isHoliday
+                  ? 'bg-green-100 hover:bg-green-200 text-green-800'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
+            `}
           >
-            {formatTime(time)}
-          </div>
+            {hour}
+            {!isAvailable && (
+              <span className="block text-xs">No disponible</span>
+            )}
+          </button>
         );
       })}
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format, isToday, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Calendar from 'react-calendar';
@@ -16,24 +16,53 @@ interface CalendarViewProps {
   onTimeChange: (time: string | null) => void;
 }
 
-const CalendarView: React.FC<CalendarViewProps> = ({
+const CalendarView: React.FC<CalendarViewProps> = ({ 
   onDateTimeSelected,
   selectedDate,
   selectedTime,
   onDateChange,
-  onTimeChange
+  onTimeChange 
 }) => {
-  const { holidays } = useAppointments();
+  const { isTimeSlotAvailable, holidays } = useAppointments();
+  const [availableHours, setAvailableHours] = useState<string[]>([]);
   const today = startOfDay(new Date());
 
-  const isHoliday = (date: Date) => {
+  const allHours = [
+    '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
+    '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
+  ];
+
+  // Verificar disponibilidad cuando se selecciona una fecha
+  const checkAvailability = useCallback(async (date: Date) => {
+    try {
+      const available = [];
+      for (const hour of allHours) {
+        const isAvailable = await isTimeSlotAvailable(date, hour);
+        if (isAvailable) {
+          available.push(hour);
+        }
+      }
+      setAvailableHours(available);
+    } catch (error) {
+      console.error('Error checking availability:', error);
+    }
+  }, [isTimeSlotAvailable, allHours]);
+
+  // Actualizar horas disponibles cuando cambia la fecha
+  useEffect(() => {
+    if (selectedDate) {
+      checkAvailability(selectedDate);
+    }
+  }, [selectedDate, checkAvailability]);
+
+  const isHoliday = useCallback((date: Date) => {
     return holidays.some(
       holiday =>
         holiday.date.getFullYear() === date.getFullYear() &&
         holiday.date.getMonth() === date.getMonth() &&
         holiday.date.getDate() === date.getDate()
     );
-  };
+  }, [holidays]);
 
   const tileClassName = ({ date, view }: { date: Date; view: string }) => {
     if (view !== 'month') return '';
@@ -73,8 +102,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="p-6">
-        <h2 className="text-2xl font-semibold mb-4">Selecciona Fecha y Hora</h2>
-        
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
             <h3 className="text-lg font-medium mb-3">1. Elige una Fecha</h3>
@@ -96,27 +123,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 formatShortWeekday={(locale, date) => format(date, 'EEEEE', { locale: es })}
               />
             </div>
-            <div className="mt-4 text-center text-gray-600">
-              <div className="text-sm">
-                <span className="inline-block w-3 h-3 bg-blue-100 rounded-full mr-1"></span> Hoy
-                <span className="inline-block w-3 h-3 bg-red-100 rounded-full ml-4 mr-1"></span> Feriado
-              </div>
-            </div>
           </div>
-          
-          <div>
-            <h3 className="text-lg font-medium mb-3">
-              2. Elige un Horario - {selectedDate ? format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es }) : ''}
-            </h3>
-            {selectedDate && (
+
+          {selectedDate && (
+            <div>
+              <h3 className="text-lg font-medium mb-3">
+                2. Elige un Horario - {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
+              </h3>
               <TimeSlotPicker
                 date={selectedDate}
                 onSelectTime={handleTimeSelect}
                 selectedTime={selectedTime}
                 isHoliday={isHoliday(selectedDate)}
+                availableHours={availableHours}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { services } from '../utils/mockData';
 import { useAppointments } from '../context/AppointmentContext';
-import { Phone, MessageSquare, Calendar, Clock, Scissors } from 'lucide-react';
+import { Phone, MessageSquare, Calendar as CalendarIcon, Clock as ClockIcon, Scissors } from 'lucide-react';
+import { formatPhoneForDisplay } from '../utils/phoneUtils';
+import { es } from 'date-fns/locale';
 
 interface BookingFormProps {
   selectedDate: Date;
@@ -16,7 +18,22 @@ const BookingForm: React.FC<BookingFormProps> = ({
   selectedTime,
   onSuccess
 }) => {
-  const { createAppointment } = useAppointments();
+  const { isTimeSlotAvailable, createAppointment } = useAppointments();
+  const [availableHours, setAvailableHours] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const allHours = [
+    '7:00 AM',
+    '8:00 AM',
+    '9:00 AM',
+    '10:00 AM',
+    '11:00 AM',
+    '3:00 PM',
+    '4:00 PM',
+    '5:00 PM',
+    '6:00 PM',
+    '7:00 PM'
+  ];
 
   const [formData, setFormData] = useState({
     clientName: '',
@@ -90,146 +107,173 @@ const BookingForm: React.FC<BookingFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
+  // Función para verificar disponibilidad de horas
+  const checkAvailableHours = useCallback(async (date: Date) => {
+    setIsLoading(true);
+    try {
+      const availableSlots = [];
+      for (const hour of allHours) {
+        const isAvailable = await isTimeSlotAvailable(date, hour);
+        if (isAvailable) {
+          availableSlots.push(hour);
+        }
+      }
+      setAvailableHours(availableSlots);
+    } catch (error) {
+      console.error('Error checking available hours:', error);
+      toast.error('Error al verificar horarios disponibles');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isTimeSlotAvailable]);
+
+  // Verificar disponibilidad cuando cambie la fecha
+  useEffect(() => {
+    if (selectedDate) {
+      checkAvailableHours(selectedDate);
+    }
+  }, [selectedDate, checkAvailableHours]);
+
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
+    checkAvailableHours(date);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
-
-    const selectedService = services.find(s => s.id === formData.service)?.name || '';
+    if (!validateForm()) return;
 
     try {
+      // Limpiar el número de teléfono antes de enviarlo
+      const cleanPhone = formData.clientPhone.replace(/\D/g, '');
+
       const appointment = await createAppointment({
         date: selectedDate,
         time: selectedTime,
-        clientName: formData.clientName,
-        clientPhone: formData.clientPhone.replace(/\D/g, ''), // Remove non-digits before saving
-        service: selectedService,
+        clientName: formData.clientName.trim(),
+        clientPhone: cleanPhone,
+        service: formData.service,
         confirmed: true
       });
 
-      if (appointment) {
-        toast.success(
-          <div>
-            <p className="font-bold">¡Cita confirmada!</p>
-            <p>Confirmación enviada por WhatsApp a {formData.clientPhone}</p>
-          </div>,
-          { duration: 5000 }
-        );
-
-        onSuccess();
-      }
-    } catch (error) {
+      toast.success(
+        <div>
+          <p className="font-bold">¡Cita confirmada!</p>
+          <p>Confirmación enviada por WhatsApp al {formData.clientPhone}</p>
+        </div>,
+        { duration: 5000 }
+      );
+      
+      onSuccess();
+    } catch (error: any) {
       console.error('Error creating appointment:', error);
-      toast.error('Error al crear la cita. Por favor intenta nuevamente.');
+      
+      if (error.message === 'El horario seleccionado ya no está disponible') {
+        toast.error('Este horario ya no está disponible. Por favor selecciona otro.');
+      } else if (error.code === '23505') {
+        toast.error('Ya existe una cita en este horario. Por favor selecciona otro.');
+      } else {
+        toast.error('Error al crear la cita. Por favor intenta nuevamente.');
+      }
     }
   };
-
+  
   const selectedServiceDetails = services.find(s => s.id === formData.service);
 
   return (
-    <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
-      <div className="p-6">
-        <h2 className="text-2xl font-semibold mb-4">Completa tu reserva</h2>
+    <div className="mt-6 bg-white rounded-lg shadow-lg p-6">
+      <h3 className="text-xl font-semibold mb-4">Detalles de la cita</h3>
+      
+      <div className="mb-4">
+        <div className="flex items-center gap-2 text-gray-600">
+          <CalendarIcon className="w-5 h-5" />
+          {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
+        </div>
+        <div className="flex items-center gap-2 text-gray-600">
+          <ClockIcon className="w-5 h-5" />
+          {selectedTime}
+        </div>
+      </div>
 
-        <div className="bg-gray-50 p-4 rounded-lg mb-6">
-          <h3 className="text-lg font-medium mb-2">Detalles de la cita</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center">
-              <Calendar className="text-gray-600 mr-2 h-5 w-5" />
-              <span>{format(selectedDate, 'MMMM d, yyyy')}</span>
-            </div>
-            <div className="flex items-center">
-              <Clock className="text-gray-600 mr-2 h-5 w-5" />
-              <span>{selectedTime}</span>
-            </div>
-            <div className="flex items-center">
-              <Scissors className="text-gray-600 mr-2 h-5 w-5" />
-              <span>{selectedServiceDetails?.name || 'Servicio'}</span>
-            </div>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Selecciona el servicio
+            </label>
+            <select
+              name="service"
+              value={formData.service}
+              onChange={handleChange}
+              className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
+            >
+              {services.map(service => (
+                <option key={service.id} value={service.id}>
+                  {service.name} - ${service.price}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre completo
+            </label>
+            <input
+              type="text"
+              name="clientName"
+              value={formData.clientName}
+              onChange={handleChange}
+              className={`block w-full p-2 border ${
+                errors.clientName ? 'border-red-500' : 'border-gray-300'
+              } rounded-md shadow-sm focus:ring-red-500 focus:border-red-500`}
+              placeholder="Juan Pérez"
+            />
+            {errors.clientName && (
+              <p className="mt-1 text-sm text-red-600">{errors.clientName}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="flex items-center">
+                <Phone className="h-4 w-4 mr-1" />
+                Teléfono
+              </div>
+            </label>
+            <input
+              type="text"
+              name="clientPhone"
+              value={formData.clientPhone}
+              onChange={handlePhoneChange}
+              className={`block w-full p-2 border ${
+                errors.clientPhone ? 'border-red-500' : 'border-gray-300'
+              } rounded-md shadow-sm focus:ring-red-500 focus:border-red-500`}
+              placeholder="000-000-0000"
+            />
+            {errors.clientPhone && (
+              <p className="mt-1 text-sm text-red-600">{errors.clientPhone}</p>
+            )}
           </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Selecciona el servicio
-              </label>
-              <select
-                name="service"
-                value={formData.service}
-                onChange={handleChange}
-                className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
-              >
-                {services.map(service => (
-                  <option key={service.id} value={service.id}>
-                    {service.name} - ${service.price}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="mt-6 flex items-center">
+          <MessageSquare className="h-5 w-5 text-green-600 mr-2" />
+          <p className="text-sm text-gray-600">
+            Se enviará un mensaje de confirmación a tu WhatsApp después de reservar.
+          </p>
+        </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre completo
-              </label>
-              <input
-                type="text"
-                name="clientName"
-                value={formData.clientName}
-                onChange={handleChange}
-                className={`block w-full p-2 border ${
-                  errors.clientName ? 'border-red-500' : 'border-gray-300'
-                } rounded-md shadow-sm focus:ring-red-500 focus:border-red-500`}
-                placeholder="Juan Pérez"
-              />
-              {errors.clientName && (
-                <p className="mt-1 text-sm text-red-600">{errors.clientName}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                <div className="flex items-center">
-                  <Phone className="h-4 w-4 mr-1" />
-                  Teléfono
-                </div>
-              </label>
-              <input
-                type="text"
-                name="clientPhone"
-                value={formData.clientPhone}
-                onChange={handlePhoneChange}
-                className={`block w-full p-2 border ${
-                  errors.clientPhone ? 'border-red-500' : 'border-gray-300'
-                } rounded-md shadow-sm focus:ring-red-500 focus:border-red-500`}
-                placeholder="000-000-0000"
-              />
-              {errors.clientPhone && (
-                <p className="mt-1 text-sm text-red-600">{errors.clientPhone}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center">
-            <MessageSquare className="h-5 w-5 text-green-600 mr-2" />
-            <p className="text-sm text-gray-600">
-              Se enviará un mensaje de confirmación a tu WhatsApp después de reservar.
-            </p>
-          </div>
-
-          <div className="mt-6">
-            <button
-              type="submit"
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md shadow transition duration-200 ease-in-out transform hover:scale-105"
-            >
-              Confirmar cita
-            </button>
-          </div>
-        </form>
-      </div>
+        <div className="mt-6">
+          <button
+            type="submit"
+            className="w-full bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Confirmar cita
+          </button>
+        </div>
+      </form>
     </div>
   );
 };
