@@ -3,7 +3,6 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
 import { generateTimeSlots, formatTime, isBusinessHour } from '../../utils/businessHours';
-import { isTimeSlotAvailable } from '../../utils/mockData';
 
 interface TimeSlotPickerProps {
   date: Date;
@@ -18,8 +17,9 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   onSelectTime,
   isHoliday
 }) => {
-  const { blockedTimes } = useAppointments();
+  const { blockedTimes, appointments } = useAppointments();
   
+  // Encontrar los horarios bloqueados para la fecha seleccionada
   const blockedTimesForDate = blockedTimes.find(
     block => 
       block.date.getFullYear() === date.getFullYear() &&
@@ -27,8 +27,29 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
       block.date.getDate() === date.getDate()
   );
   
-  const blockedTimeSlots = blockedTimesForDate?.timeSlots || [];
-  const allTimeSlots = generateTimeSlots(date, blockedTimeSlots);
+  // Encontrar las citas para la fecha seleccionada
+  const appointmentsForDate = appointments.filter(
+    app =>
+      app.date.getFullYear() === date.getFullYear() &&
+      app.date.getMonth() === date.getMonth() &&
+      app.date.getDate() === date.getDate()
+  );
+  
+  const isTimeSlotAvailable = (time: string): boolean => {
+    // Verificar si el horario está bloqueado
+    if (blockedTimesForDate?.timeSlots.includes(time)) {
+      return false;
+    }
+    
+    // Verificar si hay una cita en ese horario
+    if (appointmentsForDate.some(app => app.time === time)) {
+      return false;
+    }
+    
+    return true;
+  };
+  
+  const allTimeSlots = generateTimeSlots(date);
   
   if (isHoliday) {
     return (
@@ -50,7 +71,7 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
       {allTimeSlots.map((time) => {
-        const available = isTimeSlotAvailable(date, time);
+        const available = isTimeSlotAvailable(time);
         const isValid = isBusinessHour(date, time);
         
         let className = "time-slot p-2 rounded-md text-center cursor-pointer";
