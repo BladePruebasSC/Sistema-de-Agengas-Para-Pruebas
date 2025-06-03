@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
-import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../utils/whatsapp';
+import toast from 'react-hot-toast';
 
 interface AppointmentContextType {
   appointments: Appointment[];
@@ -10,7 +10,11 @@ interface AppointmentContextType {
   userPhone: string | null;
   setUserPhone: (phone: string) => void;
   deleteAppointment: (id: string) => Promise<void>;
-  createAppointment: (appointmentData: CreateAppointmentData) => Promise<Appointment>; // Agregar esta línea
+  createAppointment: (appointmentData: CreateAppointmentData) => Promise<Appointment>;
+  createHoliday: (holidayData: Omit<Holiday, 'id'>) => Promise<Holiday>;
+  createBlockedTime: (blockedTimeData: Omit<BlockedTime, 'id'>) => Promise<BlockedTime>;
+  removeHoliday: (id: string) => Promise<void>;
+  removeBlockedTime: (id: string) => Promise<void>;
 }
 
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
@@ -21,6 +25,26 @@ export const useAppointments = () => {
     throw new Error('useAppointments must be used within an AppointmentProvider');
   }
   return context;
+};
+
+const notifyWhatsApp = async (type: string, data: any) => {
+  try {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ type, data })
+    });
+
+    if (!response.ok) {
+      throw new Error('Error al enviar notificación de WhatsApp');
+    }
+  } catch (error) {
+    console.error('Error en notifyWhatsApp:', error);
+    throw error;
+  }
 };
 
 export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -37,193 +61,143 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchBlockedTimes();
   }, []);
 
-  const fetchAppointments = async () => {
-    const { data, error } = await supabase
-      .from('appointments')
-      .select('*')
-      .order('date', { ascending: true });
+  // ... (mantener los métodos fetch existentes)
 
-    if (error) {
-      console.error('Error fetching appointments:', error);
-      return;
-    }
-
-    // Log para verificar los datos que vienen de Supabase
-    console.log('Datos crudos de Supabase:', data);
-
-    const formattedAppointments = data.map(appointment => ({
-      ...appointment,
-      date: new Date(appointment.date)
-    }));
-
-    // Log para verificar el formateo
-    console.log('Citas formateadas:', formattedAppointments);
-
-    setAppointments(formattedAppointments);
-  };
-
-  const fetchHolidays = async () => {
-    const { data, error } = await supabase
-      .from('holidays')
-      .select('*')
-      .order('date', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching holidays:', error);
-      return;
-    }
-
-    setHolidays(data.map(holiday => ({
-      ...holiday,
-      date: new Date(holiday.date)
-    })));
-  };
-
-  const fetchBlockedTimes = async () => {
-    const { data, error } = await supabase
-      .from('blocked_times')
-      .select('*')
-      .order('date', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching blocked times:', error);
-      return;
-    }
-
-    setBlockedTimes(data.map(block => ({
-      ...block,
-      date: new Date(block.date)
-    })));
-  };
-
-  const createAppointment = async (appointmentData: CreateAppointmentData) => {
+  const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
     try {
-      const { error, data } = await supabase
+      const { data, error } = await supabase
         .from('appointments')
         .insert([appointmentData])
         .select()
         .single();
 
-      if (error) {
-        console.error('Error creating appointment:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Update local state
-      setAppointments(prev => [...prev, { ...data, date: new Date(data.date) }]);
+      const newAppointment = { ...data, date: new Date(data.date) };
+      setAppointments(prev => [...prev, newAppointment]);
 
-      return data;
+      // Notificar por WhatsApp
+      await notifyWhatsApp('appointment_created', { appointment: newAppointment });
+
+      return newAppointment;
     } catch (error) {
-      console.error('Error in createAppointment:', error);
+      console.error('Error al crear cita:', error);
       throw error;
     }
   };
 
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
-    const { data, error } = await supabase
-      .from('holidays')
-      .insert([holidayData])
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('holidays')
+        .insert([holidayData])
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const newHoliday = {
-      ...data,
-      date: new Date(data.date)
-    };
+      const newHoliday = { ...data, date: new Date(data.date) };
+      setHolidays(prev => [...prev, newHoliday]);
 
-    setHolidays(prev => [...prev, newHoliday]);
-    return newHoliday;
+      // Notificar por WhatsApp
+      await notifyWhatsApp('holiday_created', { holiday: newHoliday });
+
+      return newHoliday;
+    } catch (error) {
+      console.error('Error al crear feriado:', error);
+      throw error;
+    }
   };
 
   const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
-    const { data, error } = await supabase
-      .from('blocked_times')
-      .insert([blockedTimeData])
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('blocked_times')
+        .insert([blockedTimeData])
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const newBlockedTime = {
-      ...data,
-      date: new Date(data.date)
-    };
+      const newBlockedTime = { ...data, date: new Date(data.date) };
+      setBlockedTimes(prev => [...prev, newBlockedTime]);
 
-    setBlockedTimes(prev => [...prev, newBlockedTime]);
-    return newBlockedTime;
+      // Notificar por WhatsApp
+      await notifyWhatsApp('time_blocked', { blockedTime: newBlockedTime });
+
+      return newBlockedTime;
+    } catch (error) {
+      console.error('Error al bloquear horario:', error);
+      throw error;
+    }
   };
 
   const deleteAppointment = async (id: string): Promise<void> => {
     try {
-      // Primero verificamos que la cita existe
-      const { data: existingAppointment } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (!existingAppointment) {
-        throw new Error('La cita no existe');
+      // Obtener la cita antes de eliminarla
+      const appointment = appointments.find(app => app.id === id);
+      if (!appointment) {
+        throw new Error('Cita no encontrada');
       }
 
-      // Intentamos eliminar la cita
       const { error } = await supabase
         .from('appointments')
         .delete()
         .eq('id', id);
 
-      if (error) {
-        console.error('Error en Supabase:', error);
-        throw new Error('No se pudo eliminar la cita');
-      }
+      if (error) throw error;
 
-      // Si llegamos aquí, la eliminación fue exitosa
-      // Actualizamos el estado local
-      setAppointments(prevAppointments => 
-        prevAppointments.filter(app => app.id !== id)
-      );
+      // Actualizar estado local
+      setAppointments(prev => prev.filter(app => app.id !== id));
 
-      // Volvemos a cargar las citas para asegurarnos de estar sincronizados
-      const { data: updatedData, error: fetchError } = await supabase
-        .from('appointments')
-        .select('*')
-        .order('date', { ascending: true });
+      // Notificar por WhatsApp
+      await notifyWhatsApp('appointment_cancelled', { 
+        appointment,
+        availableSlot: true
+      });
 
-      if (!fetchError && updatedData) {
-        setAppointments(updatedData.map(app => ({
-          ...app,
-          date: new Date(app.date)
-        })));
-      }
-
+      toast.success('Cita cancelada exitosamente');
     } catch (error) {
-      console.error('Error completo:', error);
+      console.error('Error al eliminar cita:', error);
+      toast.error('Error al cancelar la cita');
       throw error;
     }
   };
 
   const removeHoliday = async (id: string): Promise<void> => {
-    const { error } = await supabase
-      .from('holidays')
-      .delete()
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('holidays')
+        .delete()
+        .eq('id', id);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    setHolidays(prev => prev.filter(holiday => holiday.id !== id));
+      setHolidays(prev => prev.filter(holiday => holiday.id !== id));
+      toast.success('Feriado eliminado exitosamente');
+    } catch (error) {
+      console.error('Error al eliminar feriado:', error);
+      toast.error('Error al eliminar el feriado');
+      throw error;
+    }
   };
 
   const removeBlockedTime = async (id: string): Promise<void> => {
-    const { error } = await supabase
-      .from('blocked_times')
-      .delete()
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('blocked_times')
+        .delete()
+        .eq('id', id);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    setBlockedTimes(prev => prev.filter(block => block.id !== id));
+      setBlockedTimes(prev => prev.filter(block => block.id !== id));
+      toast.success('Horario desbloqueado exitosamente');
+    } catch (error) {
+      console.error('Error al desbloquear horario:', error);
+      toast.error('Error al desbloquear el horario');
+      throw error;
+    }
   };
 
   const handleSetUserPhone = (phone: string) => {
@@ -239,7 +213,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       userPhone,
       setUserPhone: handleSetUserPhone,
       deleteAppointment,
-      createAppointment, // Agregar esta línea
+      createAppointment,
+      createHoliday,
+      createBlockedTime,
+      removeHoliday,
+      removeBlockedTime,
     }}>
       {children}
     </AppointmentContext.Provider>
