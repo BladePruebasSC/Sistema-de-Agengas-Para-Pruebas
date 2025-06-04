@@ -3,9 +3,10 @@ import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { formatPhoneForWhatsApp, formatPhoneForDisplay } from '../utils/phoneUtils';
-import { sendWhatsAppMessage, sendMassNotification } from '../services/twilioService';
+import { sendSMSMessage } from '../services/twilioService';
 import type { TwilioMessageData } from '../types/twilio';
 import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
+import { format, isSameDay } from 'date-fns';
 
 interface AppointmentContextType {
   appointments: Appointment[];
@@ -197,61 +198,63 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
-    try {
-      // Asegurarnos de que la fecha esté en UTC-4 (Santo Domingo)
-      const formattedDate = formatDateForSupabase(appointmentData.date);
-      
-      console.log('Fecha original:', appointmentData.date);
-      console.log('Fecha formateada para Supabase:', formattedDate);
-      
-      const { data, error } = await supabase
-        .from('appointments')
-        .insert([{
-          ...appointmentData,
-          date: formattedDate // Ya está en el formato correcto para Supabase
-        }])
-        .select()
-        .single();
+  try {
+    // Verificar si ya existe una cita en la misma fecha y hora
+    const existingAppointment = appointments.find(
+      app => 
+        isSameDay(new Date(app.date), appointmentData.date) && 
+        app.time === appointmentData.time
+    );
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw new Error('Error al crear la cita');
-      }
-
-      // Parsear la fecha de vuelta a un objeto Date
-      const newAppointment = { 
-        ...data, 
-        date: parseSupabaseDate(data.date)
-      };
-      
-      console.log('Fecha parseada:', newAppointment.date);
-      
-      setAppointments(prev => [...prev, newAppointment]);
-
-      // Enviar mensaje de confirmación
-      try {
-        await sendWhatsAppMessage(
-          appointmentData.clientPhone,
-          'appointment_created',
-          {
-            clientName: appointmentData.clientName,
-            date: newAppointment.date.toLocaleDateString('es-ES'),
-            time: appointmentData.time,
-            service: appointmentData.service
-          }
-        );
-      } catch (msgError) {
-        console.error('Error sending WhatsApp message:', msgError);
-      }
-
-      toast.success('Cita creada exitosamente');
-      return newAppointment;
-    } catch (error) {
-      console.error('Error in createAppointment:', error);
-      toast.error(error instanceof Error ? error.message : 'Error al crear la cita');
-      throw error;
+    if (existingAppointment) {
+      throw new Error('Ya existe una cita para esta fecha y hora');
     }
-  };
+
+    // Formatear la fecha para Supabase
+    const formattedDate = formatDateForSupabase(appointmentData.date);
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .insert([
+        {
+          ...appointmentData,
+          date: formattedDate
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error en Supabase:', error);
+      throw new Error('Error al crear la cita');
+    }
+
+    // Solo enviar SMS si la cita se creó correctamente
+    try {
+      await sendSMSMessage({
+        clientPhone: appointmentData.clientPhone,
+        body: `¡Hola ${appointmentData.clientName}! Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
+      });
+    } catch (smsError) {
+      console.error('Error al enviar SMS:', smsError);
+      // No lanzar el error para que no impida la creación de la cita
+    }
+
+    const newAppointment = { 
+      ...data, 
+      date: parseSupabaseDate(data.date)
+    };
+    
+    setAppointments(prev => [...prev, newAppointment]);
+    toast.success('Cita creada exitosamente');
+    return newAppointment;
+
+  } catch (error) {
+    console.error('Error in createAppointment:', error);
+    toast.error(error instanceof Error ? error.message : 'Error al crear la cita');
+    throw error;
+  }
+};
 
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
     try {

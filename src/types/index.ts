@@ -47,3 +47,23 @@ export interface BusinessHours {
 }
 
 export type DayOfWeek = 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
+
+export interface TwilioError {
+  status: number;
+  message: string;
+  code: string;
+  moreInfo: string;
+}
+
+export interface TwilioResponse {
+  sid: string;
+  status: string;
+  message: string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface TwilioMessageData {
+  clientPhone: string; // Formato esperado: "whatsapp:+1234567890"
+  body: string;
+}
