@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -87,10 +87,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
 
       const formattedAppointments = data.map(appointment => {
-        console.log('Fecha de BD:', appointment.date);
         const parsedDate = parseSupabaseDate(appointment.date);
-        console.log('Fecha parseada:', parsedDate);
-        
         return {
           ...appointment,
           date: parsedDate
@@ -152,52 +149,71 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchBlockedTimes();
   }, []);
 
-  const isTimeSlotAvailable = async (date: Date, time: string): Promise<boolean> => {
+  const isTimeSlotAvailable = useCallback(async (date: Date, time: string): Promise<boolean> => {
     try {
-        const formattedDate = date.toISOString().split('T')[0];
+      const formattedDate = formatDateForSupabase(date);
 
-        // Verificar si hay una cita existente para esta fecha y hora específica
-        const { data: existingAppointments, error } = await supabase
-            .from('appointments')
-            .select('*')
-            .eq('date', formattedDate)
-            .eq('time', time);
+      // Check holidays first (in-memory)
+      const isHoliday = holidays.some(holiday => 
+        holiday.date.getFullYear() === date.getFullYear() &&
+        holiday.date.getMonth() === date.getMonth() &&
+        holiday.date.getDate() === date.getDate()
+      );
 
-        if (error) {
-            console.error('Error checking appointments:', error);
-            throw error;
-        }
+      if (isHoliday) {
+        return false;
+      }
 
-        // Si hay alguna cita a esta hora específica, el horario no está disponible
-        if (existingAppointments && existingAppointments.length > 0) {
-            console.log(`Hora ${time} en fecha ${formattedDate} no disponible - cita existente`);
-            return false;
-        }
+      // Check blocked times (in-memory)
+      const isBlocked = blockedTimes.some(block => 
+        block.date.getFullYear() === date.getFullYear() &&
+        block.date.getMonth() === date.getMonth() &&
+        block.date.getDate() === date.getDate() &&
+        (block.timeSlots?.includes(time) || block.time === time)
+      );
 
-        // Verificar si es un día feriado
-        const { data: holiday } = await supabase
-            .from('holidays')
-            .select('*')
-            .eq('date', formattedDate)
-            .maybeSingle();
+      if (isBlocked) {
+        return false;
+      }
 
-        if (holiday) {
-            console.log(`Fecha ${formattedDate} no disponible - día feriado`);
-            return false;
-        }
+      // Check existing appointments (in-memory first)
+      const hasExistingAppointment = appointments.some(app => 
+        app.date.getFullYear() === date.getFullYear() &&
+        app.date.getMonth() === date.getMonth() &&
+        app.date.getDate() === date.getDate() &&
+        app.time === time
+      );
 
-        return true;
+      if (hasExistingAppointment) {
+        return false;
+      }
+
+      // Double check with database to ensure data is fresh
+      const { data: existingAppointment, error } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('date', formattedDate)
+        .eq('time', time)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking appointments:', error);
+        return false;
+      }
+
+      return !existingAppointment;
     } catch (error) {
-        console.error('Error checking time slot availability:', error);
-        throw error;
+      console.error('Error checking time slot availability:', error);
+      return false;
     }
-  };
+  }, [holidays, blockedTimes, appointments]);
 
   const formatPhoneNumber = (phone: string): string => {
     return `+1${phone.replace(/\D/g, '')}`;
   };
 
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
+<<<<<<< HEAD
   try {
     // Verificar si ya existe una cita en la misma fecha y hora
     const existingAppointment = appointments.find(
@@ -208,6 +224,59 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     if (existingAppointment) {
       throw new Error('Ya existe una cita para esta fecha y hora');
+=======
+    try {
+      const formattedDate = formatDateForSupabase(appointmentData.date);
+      
+      // Check availability again before creating
+      const isAvailable = await isTimeSlotAvailable(appointmentData.date, appointmentData.time);
+      if (!isAvailable) {
+        throw new Error('El horario seleccionado ya no está disponible');
+      }
+      
+      const { data, error } = await supabase
+        .from('appointments')
+        .insert([{
+          ...appointmentData,
+          date: formattedDate
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error('Error al crear la cita');
+      }
+
+      const newAppointment = { 
+        ...data, 
+        date: parseSupabaseDate(data.date)
+      };
+      
+      setAppointments(prev => [...prev, newAppointment]);
+
+      try {
+        await sendWhatsAppMessage(
+          appointmentData.clientPhone,
+          'appointment_created',
+          {
+            clientName: appointmentData.clientName,
+            date: newAppointment.date.toLocaleDateString('es-ES'),
+            time: appointmentData.time,
+            service: appointmentData.service
+          }
+        );
+      } catch (msgError) {
+        console.error('Error sending WhatsApp message:', msgError);
+      }
+
+      toast.success('Cita creada exitosamente');
+      return newAppointment;
+    } catch (error) {
+      console.error('Error in createAppointment:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al crear la cita');
+      throw error;
+>>>>>>> cb89fc2f0d8cfda2670614f271050eb1f96c7eba
     }
 
     // Formatear la fecha para Supabase
@@ -260,7 +329,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     try {
       const formattedDate = formatDateForSupabase(holidayData.date);
       
-      // Verificar si ya existe un feriado
       const { data: existingHoliday } = await supabase
           .from('holidays')
           .select('*')
@@ -283,16 +351,17 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
       setHolidays(prev => [...prev, newHoliday]);
 
-      // Enviar notificación a todos los clientes registrados
       try {
           const phones = appointments.map(app => app.clientPhone);
-          const uniquePhones = [...new Set(phones)]; // Eliminar duplicados
+          const uniquePhones = [...new Set(phones)];
           let messagesSent = 0;
 
-          // Enviar mensajes uno por uno, con límite
           for (const phone of uniquePhones) {
               if (messagesSent >= 9) {
-                  console.log('Límite de mensajes diarios alcanzado');
+                  toast('Límite de mensajes diarios alcanzado', {
+                      icon: '⚠️',
+                      duration: 4000
+                  });
                   break;
               }
 
@@ -308,14 +377,12 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
                   await new Promise(resolve => setTimeout(resolve, 1000));
               } catch (error) {
                   if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
-                      console.log('Límite de mensajes diarios alcanzado');
                       break;
                   }
                   console.error(`Error sending message to ${phone}:`, error);
               }
           }
 
-          // Si no se pudieron enviar todos los mensajes, mostrar una notificación
           if (messagesSent < uniquePhones.length) {
               toast('No se pudieron enviar todos los mensajes - Límite diario alcanzado', {
                   icon: '⚠️'
@@ -367,13 +434,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
         setBlockedTimes(prev => [...prev, newBlockedTime]);
 
-        // Enviar notificación a todos los clientes registrados
         try {
             const phones = appointments.map(app => app.clientPhone);
             const uniquePhones = [...new Set(phones)];
             let messagesSent = 0;
 
-            // Enviar mensajes uno por uno, con límite
             for (const phone of uniquePhones) {
                 if (messagesSent >= 9) {
                     toast('Límite de mensajes diarios alcanzado', {
@@ -427,48 +492,46 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const deleteAppointment = async (id: string): Promise<void> => {
     try {
-        const appointmentToDelete = appointments.find(app => app.id === id);
-        if (!appointmentToDelete) {
-            throw new Error('Cita no encontrada');
-        }
+      const appointmentToDelete = appointments.find(app => app.id === id);
+      if (!appointmentToDelete) {
+        throw new Error('Cita no encontrada');
+      }
 
-        // Primero eliminamos de la base de datos
-        const { error } = await supabase
-            .from('appointments')
-            .delete()
-            .eq('id', id);
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id);
 
-        if (error) {
-            console.error('Error deleting from database:', error);
-            toast.error('Error al cancelar la cita');
-            throw error;
-        }
+      if (error) {
+        console.error('Error deleting from database:', error);
+        toast.error('Error al cancelar la cita');
+        throw error;
+      }
 
-        // Actualizar el estado local
-        setAppointments(prev => prev.filter(app => app.id !== id));
+      // Update local state
+      setAppointments(prev => prev.filter(app => app.id !== id));
 
-        // Intentar enviar la notificación
-        try {
-            await sendWhatsAppMessage(
-                appointmentToDelete.clientPhone,
-                'appointment_cancelled',
-                {
-                    clientName: appointmentToDelete.clientName,
-                    date: appointmentToDelete.date.toLocaleDateString('es-ES'),
-                    time: appointmentToDelete.time
-                }
-            );
-            toast.success('Cita cancelada exitosamente');
-        } catch (msgError) {
-            console.error('Error al enviar notificación:', msgError);
-            toast.success('Cita cancelada exitosamente (sin notificación)');
-        }
+      // Send notification
+      try {
+        await sendWhatsAppMessage(
+          appointmentToDelete.clientPhone,
+          'appointment_cancelled',
+          {
+            clientName: appointmentToDelete.clientName,
+            date: appointmentToDelete.date.toLocaleDateString('es-ES'),
+            time: appointmentToDelete.time
+          }
+        );
+      } catch (msgError) {
+        console.error('Error al enviar notificación:', msgError);
+      }
+
+      toast.success('Cita cancelada exitosamente');
     } catch (error) {
-        if (error instanceof Error && !error.message.includes('exceeded the 9 daily messages limit')) {
-            toast.error('Error al cancelar la cita');
-        }
+      console.error('Error al cancelar la cita:', error);
+      toast.error('Error al cancelar la cita');
     }
-};
+  };
 
   const removeHoliday = async (id: string): Promise<void> => {
     try {
@@ -477,7 +540,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
             throw new Error('Feriado no encontrado');
         }
 
-        // Primero eliminamos de la base de datos
         const { error } = await supabase
             .from('holidays')
             .delete()
@@ -488,13 +550,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
             throw new Error('Error al eliminar el feriado de la base de datos');
         }
 
-        // Si la eliminación fue exitosa, notificamos
         try {
             const phones = appointments.map(app => app.clientPhone);
-            const uniquePhones = [...new Set(phones)]; // Eliminar duplicados
+            const uniquePhones = [...new Set(phones)];
             let messagesSent = 0;
 
-            // Enviar mensajes uno por uno, con límite
             for (const phone of uniquePhones) {
                 if (messagesSent >= 9) {
                     toast('Límite de mensajes diarios alcanzado', {
@@ -522,7 +582,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
                 }
             }
 
-            // Si no se pudieron enviar todos los mensajes
             if (messagesSent < uniquePhones.length) {
                 toast('No se pudieron enviar todas las notificaciones - Límite diario alcanzado', {
                     icon: '⚠️',
@@ -537,7 +596,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
             });
         }
 
-        // Actualizar el estado local
         setHolidays(prev => prev.filter(h => h.id !== id));
         toast.success('Feriado eliminado exitosamente');
     } catch (error) {
