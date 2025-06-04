@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -151,46 +151,52 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     fetchBlockedTimes();
   }, []);
 
-  const isTimeSlotAvailable = async (date: Date, time: string): Promise<boolean> => {
+  const isTimeSlotAvailable = useCallback(async (date: Date, time: string): Promise<boolean> => {
     try {
-        const formattedDate = date.toISOString().split('T')[0];
+      const formattedDate = formatDateForSupabase(date);
 
-        // Verificar si hay una cita existente para esta fecha y hora específica
-        const { data: existingAppointments, error } = await supabase
-            .from('appointments')
-            .select('*')
-            .eq('date', formattedDate)
-            .eq('time', time);
+      // Check holidays first (in-memory)
+      const isHoliday = holidays.some(holiday => 
+        holiday.date.getFullYear() === date.getFullYear() &&
+        holiday.date.getMonth() === date.getMonth() &&
+        holiday.date.getDate() === date.getDate()
+      );
 
-        if (error) {
-            console.error('Error checking appointments:', error);
-            throw error;
-        }
+      if (isHoliday) {
+        return false;
+      }
 
-        // Si hay alguna cita a esta hora específica, el horario no está disponible
-        if (existingAppointments && existingAppointments.length > 0) {
-            console.log(`Hora ${time} en fecha ${formattedDate} no disponible - cita existente`);
-            return false;
-        }
+      // Check blocked times (in-memory)
+      const isBlocked = blockedTimes.some(block => 
+        block.date.getFullYear() === date.getFullYear() &&
+        block.date.getMonth() === date.getMonth() &&
+        block.date.getDate() === date.getDate() &&
+        block.timeSlots.includes(time)
+      );
 
-        // Verificar si es un día feriado
-        const { data: holiday } = await supabase
-            .from('holidays')
-            .select('*')
-            .eq('date', formattedDate)
-            .maybeSingle();
+      if (isBlocked) {
+        return false;
+      }
 
-        if (holiday) {
-            console.log(`Fecha ${formattedDate} no disponible - día feriado`);
-            return false;
-        }
+      // Check appointments (database query)
+      const { data: existingAppointments, error } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('date', formattedDate)
+        .eq('time', time)
+        .maybeSingle();
 
-        return true;
+      if (error) {
+        console.error('Error checking appointments:', error);
+        return false;
+      }
+
+      return !existingAppointments;
     } catch (error) {
-        console.error('Error checking time slot availability:', error);
-        throw error;
+      console.error('Error checking time slot availability:', error);
+      return false;
     }
-  };
+  }, [holidays, blockedTimes]);
 
   const formatPhoneNumber = (phone: string): string => {
     return `+1${phone.replace(/\D/g, '')}`;
@@ -424,48 +430,47 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const deleteAppointment = async (id: string): Promise<void> => {
     try {
-        const appointmentToDelete = appointments.find(app => app.id === id);
-        if (!appointmentToDelete) {
-            throw new Error('Cita no encontrada');
-        }
+      const appointmentToDelete = appointments.find(app => app.id === id);
+      if (!appointmentToDelete) {
+        throw new Error('Cita no encontrada');
+      }
 
-        // Primero eliminamos de la base de datos
-        const { error } = await supabase
-            .from('appointments')
-            .delete()
-            .eq('id', id);
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id);
 
-        if (error) {
-            console.error('Error deleting from database:', error);
-            toast.error('Error al cancelar la cita');
-            throw error;
-        }
+      if (error) {
+        console.error('Error deleting from database:', error);
+        toast.error('Error al cancelar la cita');
+        throw error;
+      }
 
-        // Actualizar el estado local
-        setAppointments(prev => prev.filter(app => app.id !== id));
+      // Update local state
+      setAppointments(prev => prev.filter(app => app.id !== id));
 
-        // Intentar enviar la notificación
-        try {
-            await sendWhatsAppMessage(
-                appointmentToDelete.clientPhone,
-                'appointment_cancelled',
-                {
-                    clientName: appointmentToDelete.clientName,
-                    date: appointmentToDelete.date.toLocaleDateString('es-ES'),
-                    time: appointmentToDelete.time
-                }
-            );
-            toast.success('Cita cancelada exitosamente');
-        } catch (msgError) {
-            console.error('Error al enviar notificación:', msgError);
-            toast.success('Cita cancelada exitosamente (sin notificación)');
-        }
+      // Send notification
+      try {
+        await sendWhatsAppMessage(
+          appointmentToDelete.clientPhone,
+          'appointment_cancelled',
+          {
+            clientName: appointmentToDelete.clientName,
+            date: appointmentToDelete.date.toLocaleDateString('es-ES'),
+            time: appointmentToDelete.time
+          }
+        );
+      } catch (msgError) {
+        console.error('Error al enviar notificación:', msgError);
+      }
+
+      toast.success('Cita cancelada exitosamente');
     } catch (error) {
-        if (error instanceof Error && !error.message.includes('exceeded the 9 daily messages limit')) {
-            toast.error('Error al cancelar la cita');
-        }
+      if (error instanceof Error && !error.message.includes('exceeded the 9 daily messages limit')) {
+        toast.error('Error al cancelar la cita');
+      }
     }
-};
+  };
 
   const removeHoliday = async (id: string): Promise<void> => {
     try {
