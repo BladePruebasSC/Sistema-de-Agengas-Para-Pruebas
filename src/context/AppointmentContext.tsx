@@ -20,6 +20,7 @@ interface AppointmentContextType {
   createBlockedTime: (blockedTimeData: Omit<BlockedTime, 'id'>) => Promise<BlockedTime>;
   removeHoliday: (id: string) => Promise<void>;
   removeBlockedTime: (id: string) => Promise<void>;
+  isLoadingSlots: boolean;
   isTimeSlotAvailable: (date: Date, time: string) => Promise<boolean>;
 }
 
@@ -85,6 +86,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [userPhone, setUserPhone] = useState<string | null>(() => {
     return localStorage.getItem('userPhone');
   });
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
 
   const fetchAppointments = async () => {
     try {
@@ -162,6 +164,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   }, []);
 
   const isTimeSlotAvailable = useCallback(async (date: Date, time: string): Promise<boolean> => {
+    setIsLoadingSlots(true);
     try {
       const formattedDate = formatDateForSupabase(date);
 
@@ -212,6 +215,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     } catch (error) {
       console.error('Error checking availability:', error);
       return false;
+    } finally {
+      setIsLoadingSlots(false);
     }
   }, [holidays]);
 
@@ -559,6 +564,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     removeHoliday,
     createBlockedTime,
     removeBlockedTime,
+    isLoadingSlots,
     isTimeSlotAvailable
   };
 
