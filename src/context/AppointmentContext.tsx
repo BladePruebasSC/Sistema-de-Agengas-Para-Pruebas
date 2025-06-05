@@ -27,7 +27,7 @@ const AppointmentContext = createContext<AppointmentContextType | undefined>(und
 
 export const useAppointments = () => {
   const context = useContext(AppointmentContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAppointments must be used within an AppointmentProvider');
   }
   return context;
@@ -481,21 +481,52 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+  const deleteAppointment = async (id: string): Promise<void> => {
+    try {
+      const appointmentToDelete = appointments.find(app => app.id === id);
+      if (!appointmentToDelete) return;
+
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Update local state
+      setAppointments(prev => prev.filter(app => app.id !== id));
+
+      // Send SMS notification
+      try {
+        await sendSMSMessage({
+          clientPhone: appointmentToDelete.clientPhone,
+          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`
+        });
+      } catch (smsError) {
+        console.error('Error al enviar SMS:', smsError);
+      }
+    } catch (error) {
+      console.error('Error al eliminar la cita:', error);
+    }
+  };
+
+  const value = {
+    appointments,
+    holidays,
+    blockedTimes,
+    userPhone,
+    setUserPhone,
+    deleteAppointment,  // Make sure it's included here
+    createAppointment,
+    createHoliday,
+    removeHoliday,
+    createBlockedTime,
+    removeBlockedTime,
+    isTimeSlotAvailable
+  };
+
   return (
-    <AppointmentContext.Provider value={{
-      appointments,
-      holidays,
-      blockedTimes,
-      userPhone,
-      setUserPhone: handleSetUserPhone,
-      deleteAppointment,
-      createAppointment,
-      createHoliday,
-      createBlockedTime,
-      removeHoliday,
-      removeBlockedTime,
-      isTimeSlotAvailable,
-    }}>
+    <AppointmentContext.Provider value={value}>
       {children}
     </AppointmentContext.Provider>
   );
