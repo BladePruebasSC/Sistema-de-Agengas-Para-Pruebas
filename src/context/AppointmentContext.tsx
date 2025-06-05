@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Appointment, Holiday, BlockedTime } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase'; // Importa supabase desde el archivo separado
 import toast from 'react-hot-toast';
 import { formatPhoneForWhatsApp, formatPhoneForDisplay } from '../utils/phoneUtils';
 import { sendSMSMessage } from '../services/twilioService';
@@ -64,6 +64,18 @@ const notifyWhatsApp = async (type: string, data: any) => {
 const getAllRegisteredPhones = (appointments: Appointment[]): string[] => {
   const phones = new Set(appointments.map(app => app.clientPhone));
   return Array.from(phones);
+};
+
+const fetchWithRetry = async (operation: () => Promise<any>, maxRetries = 3, delay = 1000) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      console.log(`Retry attempt ${i + 1} of ${maxRetries}`);
+      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+    }
+  }
 };
 
 export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -213,76 +225,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
-<<<<<<< HEAD
   try {
-    // Verificar si ya existe una cita en la misma fecha y hora
-    const existingAppointment = appointments.find(
-      app => 
-        isSameDay(new Date(app.date), appointmentData.date) && 
-        app.time === appointmentData.time
-    );
-
-    if (existingAppointment) {
-      throw new Error('Ya existe una cita para esta fecha y hora');
-=======
-    try {
-      const formattedDate = formatDateForSupabase(appointmentData.date);
-      
-      // Check availability again before creating
-      const isAvailable = await isTimeSlotAvailable(appointmentData.date, appointmentData.time);
-      if (!isAvailable) {
-        throw new Error('El horario seleccionado ya no está disponible');
-      }
-      
-      const { data, error } = await supabase
-        .from('appointments')
-        .insert([{
-          ...appointmentData,
-          date: formattedDate
-        }])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Supabase error:', error);
-        throw new Error('Error al crear la cita');
-      }
-
-      const newAppointment = { 
-        ...data, 
-        date: parseSupabaseDate(data.date)
-      };
-      
-      setAppointments(prev => [...prev, newAppointment]);
-
-      try {
-        await sendWhatsAppMessage(
-          appointmentData.clientPhone,
-          'appointment_created',
-          {
-            clientName: appointmentData.clientName,
-            date: newAppointment.date.toLocaleDateString('es-ES'),
-            time: appointmentData.time,
-            service: appointmentData.service
-          }
-        );
-      } catch (msgError) {
-        console.error('Error sending WhatsApp message:', msgError);
-      }
-
-      toast.success('Cita creada exitosamente');
-      return newAppointment;
-    } catch (error) {
-      console.error('Error in createAppointment:', error);
-      toast.error(error instanceof Error ? error.message : 'Error al crear la cita');
-      throw error;
->>>>>>> cb89fc2f0d8cfda2670614f271050eb1f96c7eba
-    }
-
-    // Formatear la fecha para Supabase
+    // First create the appointment in the database
     const formattedDate = formatDateForSupabase(appointmentData.date);
-
-    const { data, error } = await supabase
+    
+    const { data: newAppointment, error } = await supabase
       .from('appointments')
       .insert([
         {
@@ -294,30 +241,31 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       .single();
 
     if (error) {
-      console.error('Error en Supabase:', error);
-      throw new Error('Error al crear la cita');
+      console.error('Error Supabase:', error);
+      throw new Error('Error al crear la cita en la base de datos');
     }
 
-    // Solo enviar SMS si la cita se creó correctamente
+    // Then try to send the SMS
     try {
       await sendSMSMessage({
         clientPhone: appointmentData.clientPhone,
-        body: `¡Hola ${appointmentData.clientName}! Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
+        body: `Gaston Stylo: Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
       });
     } catch (smsError) {
+      // Log SMS error but don't fail the appointment creation
       console.error('Error al enviar SMS:', smsError);
-      // No lanzar el error para que no impida la creación de la cita
+      toast.error('La cita se creó pero hubo un error al enviar el SMS');
     }
 
-    const newAppointment = { 
-      ...data, 
-      date: parseSupabaseDate(data.date)
+    const parsedAppointment = {
+      ...newAppointment,
+      date: parseSupabaseDate(newAppointment.date)
     };
-    
-    setAppointments(prev => [...prev, newAppointment]);
-    toast.success('Cita creada exitosamente');
-    return newAppointment;
 
+    setAppointments(prev => [...prev, parsedAppointment]);
+    toast.success('Cita creada exitosamente');
+    
+    return parsedAppointment;
   } catch (error) {
     console.error('Error in createAppointment:', error);
     toast.error(error instanceof Error ? error.message : 'Error al crear la cita');
@@ -336,7 +284,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           .single();
 
       if (existingHoliday) {
-          toast.error('Ya existe un feriado en esta fecha');
           throw new Error('Ya existe un feriado en esta fecha');
       }
 
@@ -351,151 +298,82 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
       setHolidays(prev => [...prev, newHoliday]);
 
+      // Send SMS to all clients with appointments
       try {
-          const phones = appointments.map(app => app.clientPhone);
-          const uniquePhones = [...new Set(phones)];
-          let messagesSent = 0;
-
-          for (const phone of uniquePhones) {
-              if (messagesSent >= 9) {
-                  toast('Límite de mensajes diarios alcanzado', {
-                      icon: '⚠️',
-                      duration: 4000
-                  });
-                  break;
-              }
-
-              try {
-                  await sendWhatsAppMessage(
-                      phone,
-                      'holiday_added',
-                      {
-                          date: newHoliday.date.toLocaleDateString('es-ES')
-                      }
-                  );
-                  messagesSent++;
-                  await new Promise(resolve => setTimeout(resolve, 1000));
-              } catch (error) {
-                  if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
-                      break;
-                  }
-                  console.error(`Error sending message to ${phone}:`, error);
-              }
-          }
-
-          if (messagesSent < uniquePhones.length) {
-              toast('No se pudieron enviar todos los mensajes - Límite diario alcanzado', {
-                  icon: '⚠️'
-              });
-          }
-      } catch (msgError) {
-          console.error('Error sending holiday notifications:', msgError);
-          toast('No se pudieron enviar las notificaciones', {
-              icon: '⚠️'
+        const phones = getAllRegisteredPhones(appointments);
+        for (const phone of phones) {
+          await sendSMSMessage({
+            clientPhone: phone,
+            body: `Gaston Stylo: Se ha agregado un día feriado para el ${format(newHoliday.date, 'dd/MM/yyyy')}.`
           });
+        }
+      } catch (smsError) {
+        console.error('Error al enviar SMS:', smsError);
       }
 
-      toast.success('Feriado agregado exitosamente');
       return newHoliday;
     } catch (error) {
       console.error('Error creating holiday:', error);
-      if (error instanceof Error) {
-          toast.error(error.message);
-      } else {
-          toast.error('Error al crear el feriado');
-      }
       throw error;
     }
   };
 
   const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
-    try {
-        const formattedDate = formatDateForSupabase(blockedTimeData.date);
-        
-        const { data, error } = await supabase
-            .from('blocked_times')
-            .insert([{
-                ...blockedTimeData,
-                date: formattedDate,
-                time: blockedTimeData.timeSlots?.[0] || '',
-                timeSlots: blockedTimeData.timeSlots || [blockedTimeData.time]
-            }])
-            .select()
-            .single();
+  try {
+    const formattedDate = formatDateForSupabase(blockedTimeData.date);
+    
+    const dataToInsert = {
+      ...blockedTimeData,
+      date: formattedDate,
+      time: blockedTimeData.timeSlots,
+      timeSlots: blockedTimeData.timeSlots
+    };
 
-        if (error) throw error;
+    const { data, error } = await supabase
+      .from('blocked_times')
+      .insert([dataToInsert])
+      .select()
+      .single();
 
-        const newBlockedTime = { 
-            ...data, 
-            date: parseSupabaseDate(data.date),
-            time: data.time || data.timeSlots?.[0] || '',
-            timeSlots: data.timeSlots || [data.time]
-        };
-
-        setBlockedTimes(prev => [...prev, newBlockedTime]);
-
-        try {
-            const phones = appointments.map(app => app.clientPhone);
-            const uniquePhones = [...new Set(phones)];
-            let messagesSent = 0;
-
-            for (const phone of uniquePhones) {
-                if (messagesSent >= 9) {
-                    toast('Límite de mensajes diarios alcanzado', {
-                        icon: '⚠️',
-                        duration: 4000
-                    });
-                    break;
-                }
-
-                try {
-                    await sendWhatsAppMessage(
-                        phone,
-                        'time_blocked',
-                        {
-                            date: newBlockedTime.date.toLocaleDateString('es-ES'),
-                            time: newBlockedTime.time
-                        }
-                    );
-                    messagesSent++;
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                } catch (error) {
-                    if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
-                        break;
-                    }
-                    console.error(`Error sending message to ${phone}:`, error);
-                }
-            }
-
-            if (messagesSent < uniquePhones.length) {
-                toast('No se pudieron enviar todas las notificaciones - Límite diario alcanzado', {
-                    icon: '⚠️',
-                    duration: 4000
-                });
-            }
-        } catch (msgError) {
-            console.error('Error sending blocked time notifications:', msgError);
-            toast('Error al enviar notificaciones', {
-                icon: '⚠️',
-                duration: 4000
-            });
-        }
-
-        toast.success('Horario bloqueado exitosamente');
-        return newBlockedTime;
-    } catch (error) {
-        console.error('Error creating blocked time:', error);
-        toast.error('Error al bloquear el horario');
-        throw error;
+    if (error) {
+      console.error('Error creating blocked time:', error);
+      throw error;
     }
-  };
+
+    const newBlockedTime = { 
+      ...data, 
+      date: parseSupabaseDate(data.date)
+    };
+
+    setBlockedTimes(prev => [...prev, newBlockedTime]);
+
+    // Only try to notify clients with existing appointments on this date
+    const appointmentsOnDate = appointments.filter(app => 
+      isSameDay(app.date, newBlockedTime.date)
+    );
+
+    for (const appointment of appointmentsOnDate) {
+      try {
+        await sendSMSMessage({
+          clientPhone: appointment.clientPhone,
+          body: `Gaston Stylo: El horario de las ${newBlockedTime.time} del ${format(newBlockedTime.date, 'dd/MM/yyyy')} ha sido bloqueado.`
+        });
+      } catch (error) {
+        console.error('SMS notification error:', error);
+      }
+    }
+
+    return newBlockedTime;
+  } catch (error) {
+    console.error('Error creating blocked time:', error);
+    throw error;
+  }
+};
 
   const deleteAppointment = async (id: string): Promise<void> => {
     try {
       const appointmentToDelete = appointments.find(app => app.id === id);
-      if (!appointmentToDelete) {
-        throw new Error('Cita no encontrada');
-      }
+      if (!appointmentToDelete) return;
 
       const { error } = await supabase
         .from('appointments')
@@ -503,33 +381,24 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         .eq('id', id);
 
       if (error) {
-        console.error('Error deleting from database:', error);
-        toast.error('Error al cancelar la cita');
-        throw error;
+        console.error('Error deleting appointment:', error);
+        return;
       }
 
-      // Update local state
+      // Update local state silently
       setAppointments(prev => prev.filter(app => app.id !== id));
 
-      // Send notification
+      // Try to send SMS but don't show any errors
       try {
-        await sendWhatsAppMessage(
-          appointmentToDelete.clientPhone,
-          'appointment_cancelled',
-          {
-            clientName: appointmentToDelete.clientName,
-            date: appointmentToDelete.date.toLocaleDateString('es-ES'),
-            time: appointmentToDelete.time
-          }
-        );
-      } catch (msgError) {
-        console.error('Error al enviar notificación:', msgError);
+        await sendSMSMessage({
+          clientPhone: appointmentToDelete.clientPhone,
+          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`
+        });
+      } catch (error) {
+        console.error('SMS error:', error);
       }
-
-      toast.success('Cita cancelada exitosamente');
     } catch (error) {
-      console.error('Error al cancelar la cita:', error);
-      toast.error('Error al cancelar la cita');
+      console.error('Delete error:', error);
     }
   };
 
@@ -545,62 +414,24 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
             .delete()
             .eq('id', id);
 
-        if (error) {
-            console.error('Error Supabase:', error);
-            throw new Error('Error al eliminar el feriado de la base de datos');
-        }
-
-        try {
-            const phones = appointments.map(app => app.clientPhone);
-            const uniquePhones = [...new Set(phones)];
-            let messagesSent = 0;
-
-            for (const phone of uniquePhones) {
-                if (messagesSent >= 9) {
-                    toast('Límite de mensajes diarios alcanzado', {
-                        icon: '⚠️',
-                        duration: 4000
-                    });
-                    break;
-                }
-
-                try {
-                    await sendWhatsAppMessage(
-                        phone,
-                        'holiday_removed',
-                        {
-                            date: new Date(holidayToRemove.date).toLocaleDateString('es-ES')
-                        }
-                    );
-                    messagesSent++;
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                } catch (error) {
-                    if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
-                        break;
-                    }
-                    console.error(`Error sending message to ${phone}:`, error);
-                }
-            }
-
-            if (messagesSent < uniquePhones.length) {
-                toast('No se pudieron enviar todas las notificaciones - Límite diario alcanzado', {
-                    icon: '⚠️',
-                    duration: 4000
-                });
-            }
-        } catch (msgError) {
-            console.error('Error enviando notificaciones:', msgError);
-            toast('Error al enviar notificaciones', {
-                icon: '⚠️',
-                duration: 4000
-            });
-        }
+        if (error) throw error;
 
         setHolidays(prev => prev.filter(h => h.id !== id));
-        toast.success('Feriado eliminado exitosamente');
+
+        // Send SMS to all clients with appointments
+        try {
+          const phones = getAllRegisteredPhones(appointments);
+          for (const phone of phones) {
+            await sendSMSMessage({
+              clientPhone: phone,
+              body: `Gaston Stylo: Se ha eliminado el feriado del ${format(holidayToRemove.date, 'dd/MM/yyyy')}.`
+            });
+          }
+        } catch (smsError) {
+          console.error('Error al enviar SMS:', smsError);
+        }
     } catch (error) {
         console.error('Error removing holiday:', error);
-        toast.error(error instanceof Error ? error.message : 'Error al eliminar el feriado');
         throw error;
     }
   };
@@ -617,63 +448,24 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
             .delete()
             .eq('id', id);
 
-        if (error) {
-            console.error('Error Supabase:', error);
-            throw new Error('Error al eliminar el horario bloqueado');
-        }
-
-        try {
-            const phones = appointments.map(app => app.clientPhone);
-            const uniquePhones = [...new Set(phones)];
-            let messagesSent = 0;
-
-            for (const phone of uniquePhones) {
-                if (messagesSent >= 9) {
-                    toast('Límite de mensajes diarios alcanzado', {
-                        icon: '⚠️',
-                        duration: 4000
-                    });
-                    break;
-                }
-
-                try {
-                    await sendWhatsAppMessage(
-                        phone,
-                        'time_unblocked',
-                        {
-                            date: new Date(blockedTimeToRemove.date).toLocaleDateString('es-ES'),
-                            time: blockedTimeToRemove.time
-                        }
-                    );
-                    messagesSent++;
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                } catch (error) {
-                    if (error instanceof Error && error.message.includes('exceeded the 9 daily messages limit')) {
-                        break;
-                    }
-                    console.error(`Error sending message to ${phone}:`, error);
-                }
-            }
-
-            if (messagesSent < uniquePhones.length) {
-                toast('No se pudieron enviar todas las notificaciones - Límite diario alcanzado', {
-                    icon: '⚠️',
-                    duration: 4000
-                });
-            }
-        } catch (msgError) {
-            console.error('Error enviando notificaciones:', msgError);
-            toast('Error al enviar notificaciones', {
-                icon: '⚠️',
-                duration: 4000
-            });
-        }
+        if (error) throw error;
 
         setBlockedTimes(prev => prev.filter(bt => bt.id !== id));
-        toast.success('Horario desbloqueado exitosamente');
+
+        // Send SMS to all clients with appointments
+        try {
+          const phones = getAllRegisteredPhones(appointments);
+          for (const phone of phones) {
+            await sendSMSMessage({
+              clientPhone: phone,
+              body: `Gaston Stylo: Se ha desbloqueado el horario de las ${blockedTimeToRemove.time} del ${format(blockedTimeToRemove.date, 'dd/MM/yyyy')}.`
+            });
+          }
+        } catch (smsError) {
+          console.error('Error al enviar SMS:', smsError);
+        }
     } catch (error) {
         console.error('Error removing blocked time:', error);
-        toast.error(error instanceof Error ? error.message : 'Error al desbloquear el horario');
         throw error;
     }
   };
@@ -681,6 +473,39 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const handleSetUserPhone = (phone: string) => {
     setUserPhone(phone);
     localStorage.setItem('userPhone', phone);
+  };
+
+  const checkExistingAppointment = async (date: Date, time: string): Promise<boolean> => {
+    try {
+      const formattedDate = formatDateForSupabase(date);
+
+      const { data, error } = await fetchWithRetry(() => 
+        supabase
+          .from('appointments')
+          .select('id')
+          .eq('date', formattedDate)
+          .eq('time', time)
+          .single()
+      );
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return false;
+        }
+        console.error('Error checking appointments:', error);
+        throw error;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error('Error checking appointments:', {
+        message: error.message,
+        details: error.stack,
+        date: formattedDate,
+        time
+      });
+      return false;
+    }
   };
 
   return (

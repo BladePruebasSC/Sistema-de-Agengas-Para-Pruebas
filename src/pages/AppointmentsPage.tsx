@@ -46,16 +46,6 @@ const AppointmentsPage: React.FC = () => {
         console.log('Intentando eliminar cita con ID:', id);
         await deleteAppointment(id);
         
-        // Esperamos un momento para asegurarnos que la UI se actualice
-        setTimeout(() => {
-          // Verificamos si la cita aún existe en la lista
-          const citaExiste = appointments.some(app => app.id === id);
-          if (citaExiste) {
-            toast.error('La cita no se eliminó correctamente');
-          } else {
-            toast.success('Cita cancelada correctamente');
-          }
-        }, 1000);
 
       } catch (error) {
         console.error('Error al cancelar la cita:', error);
