@@ -165,60 +165,55 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     try {
       const formattedDate = formatDateForSupabase(date);
 
-      // Check holidays first (in-memory)
-      const isHoliday = holidays.some(holiday => 
-        holiday.date.getFullYear() === date.getFullYear() &&
-        holiday.date.getMonth() === date.getMonth() &&
-        holiday.date.getDate() === date.getDate()
-      );
-
-      if (isHoliday) {
-        return false;
-      }
-
-      // Check blocked times (in-memory)
-      const isBlocked = blockedTimes.some(block => 
-        block.date.getFullYear() === date.getFullYear() &&
-        block.date.getMonth() === date.getMonth() &&
-        block.date.getDate() === date.getDate() &&
-        (block.timeSlots?.includes(time) || block.time === time)
-      );
-
-      if (isBlocked) {
-        return false;
-      }
-
-      // Check existing appointments (in-memory first)
-      const hasExistingAppointment = appointments.some(app => 
-        app.date.getFullYear() === date.getFullYear() &&
-        app.date.getMonth() === date.getMonth() &&
-        app.date.getDate() === date.getDate() &&
-        app.time === time
-      );
-
-      if (hasExistingAppointment) {
-        return false;
-      }
-
-      // Double check with database to ensure data is fresh
-      const { data: existingAppointment, error } = await supabase
+      // 1. Check for existing appointments
+      const { data: existingAppointment, error: appointmentError } = await supabase
         .from('appointments')
-        .select('id')
+        .select('*')
         .eq('date', formattedDate)
         .eq('time', time)
         .maybeSingle();
 
-      if (error) {
-        console.error('Error checking appointments:', error);
+      if (appointmentError) {
+        console.error('Error checking appointments:', appointmentError);
         return false;
       }
 
-      return !existingAppointment;
+      if (existingAppointment) {
+        console.log('Time slot has appointment:', existingAppointment);
+        return false;
+      }
+
+      // 2. Check for blocked times
+      const { data: blockedTime, error: blockedError } = await supabase
+        .from('blocked_times')
+        .select('*')
+        .eq('date', formattedDate)
+        .contains('timeSlots', [time])
+        .maybeSingle();
+
+      if (blockedError) {
+        console.error('Error checking blocked times:', blockedError);
+        return false;
+      }
+
+      if (blockedTime) {
+        console.log('Time slot is blocked:', blockedTime);
+        return false;
+      }
+
+      // 3. Check for holidays
+      const isHoliday = holidays.some(holiday => isSameDay(holiday.date, date));
+      if (isHoliday) {
+        console.log('Date is a holiday');
+        return false;
+      }
+
+      return true;
     } catch (error) {
-      console.error('Error checking time slot availability:', error);
+      console.error('Error checking availability:', error);
       return false;
     }
-  }, [holidays, blockedTimes, appointments]);
+  }, [holidays]);
 
   const formatPhoneNumber = (phone: string): string => {
     return `+1${phone.replace(/\D/g, '')}`;
@@ -376,42 +371,67 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   try {
     const formattedDate = formatDateForSupabase(blockedTimeData.date);
     
-    const dataToInsert = {
-      ...blockedTimeData,
-      date: formattedDate,
-      time: blockedTimeData.timeSlots,
-      timeSlots: blockedTimeData.timeSlots
-    };
+    // Ensure timeSlots is an array
+    const timeSlots = Array.isArray(blockedTimeData.timeSlots) 
+      ? blockedTimeData.timeSlots 
+      : [blockedTimeData.timeSlots];
 
+    // Check for existing appointments in these time slots
+    const { data: existingAppointments, error: checkError } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('date', formattedDate)
+      .in('time', timeSlots);
+
+    if (checkError) {
+      console.error('Error checking existing appointments:', checkError);
+      throw checkError;
+    }
+
+    if (existingAppointments && existingAppointments.length > 0) {
+      const conflictingTimes = existingAppointments.map(app => app.time).join(', ');
+      throw new Error(`Ya existen citas en los siguientes horarios: ${conflictingTimes}`);
+    }
+
+    // Create the block
     const { data, error } = await supabase
       .from('blocked_times')
-      .insert([dataToInsert])
+      .insert([{
+        date: formattedDate,
+        timeSlots: timeSlots,
+        time: timeSlots.join(', '), // Store all times in the time field
+        reason: blockedTimeData.reason || 'Horario bloqueado'
+      }])
       .select()
       .single();
 
     if (error) {
-      console.error('Error creating blocked time:', error);
+      console.error('Error al crear bloqueo:', error);
       throw error;
     }
 
-    const newBlockedTime = { 
-      ...data, 
+    const newBlockedTime = {
+      ...data,
       date: parseSupabaseDate(data.date)
     };
 
     setBlockedTimes(prev => [...prev, newBlockedTime]);
 
-    // Notify clients with appointments at this time
+    // Notify affected clients
     const appointmentsAtTime = appointments.filter(app => 
-      isSameDay(app.date, blockedTimeData.date) && app.time === blockedTimeData.timeSlots
+      isSameDay(app.date, blockedTimeData.date) && 
+      timeSlots.includes(app.time)
     );
+
+    console.log('Sending notifications to affected appointments:', appointmentsAtTime);
 
     for (const appointment of appointmentsAtTime) {
       try {
-        await sendSMSMessage({
+        const message = await sendSMSMessage({
           clientPhone: appointment.clientPhone,
-          body: `Gaston Stylo: Esta hora no esta disponible para citas (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
+          body: `Gaston Stylo: Los horarios ${timeSlots.join(', ')} del ${format(blockedTimeData.date, 'dd/MM/yyyy')} no están disponibles para citas.`
         });
+        console.log('SMS sent:', message);
       } catch (smsError) {
         console.error('Error al enviar SMS:', smsError);
       }
@@ -419,45 +439,46 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     return newBlockedTime;
   } catch (error) {
-    console.error('Error creating blocked time:', error);
+    console.error('Error al crear bloqueo:', error);
     throw error;
   }
 };
 
   const removeBlockedTime = async (id: string): Promise<void> => {
-    try {
-        const blockedTimeToRemove = blockedTimes.find(bt => bt.id === id);
-        if (!blockedTimeToRemove) return;
+  try {
+    const blockedTimeToRemove = blockedTimes.find(bt => bt.id === id);
+    if (!blockedTimeToRemove) return;
 
-        const { error } = await supabase
-            .from('blocked_times')
-            .delete()
-            .eq('id', id);
+    const { error } = await supabase
+      .from('blocked_times')
+      .delete()
+      .eq('id', id);
 
-        if (error) throw error;
+    if (error) throw error;
 
-        setBlockedTimes(prev => prev.filter(bt => bt.id !== id));
+    setBlockedTimes(prev => prev.filter(bt => bt.id !== id));
 
-        // Notify clients with appointments at this time
-        const appointmentsAtTime = appointments.filter(app => 
-          isSameDay(app.date, blockedTimeToRemove.date) && app.time === blockedTimeToRemove.timeSlots
-        );
+    // Notificar a los clientes cuando se desbloquea el horario
+    const appointmentsAtTime = appointments.filter(app => 
+      isSameDay(app.date, blockedTimeToRemove.date) && 
+      app.time === blockedTimeToRemove.timeSlots
+    );
 
-        for (const appointment of appointmentsAtTime) {
-          try {
-            await sendSMSMessage({
-              clientPhone: appointment.clientPhone,
-              body: `Gaston Stylo: Esta hora esta disponible para citas (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
-            });
-          } catch (smsError) {
-            console.error('Error al enviar SMS:', smsError);
-          }
-        }
-    } catch (error) {
-        console.error('Error removing blocked time:', error);
-        throw error;
+    for (const appointment of appointmentsAtTime) {
+      try {
+        await sendSMSMessage({
+          clientPhone: appointment.clientPhone,
+          body: `Gaston Stylo: La hora ${blockedTimeToRemove.timeSlots} del día ${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ahora está disponible para citas.`
+        });
+      } catch (smsError) {
+        console.error('Error al enviar SMS:', smsError);
+      }
     }
-  };
+  } catch (error) {
+    console.error('Error removing blocked time:', error);
+    throw error;
+  }
+};
 
   const handleSetUserPhone = (phone: string) => {
     setUserPhone(phone);

@@ -27,8 +27,8 @@ export interface Holiday {
 export interface BlockedTime {
   id: string;
   date: Date;
-  time: string;    // Make sure this exists
-  timeSlots: string;
+  time: string;
+  timeSlots: string[]; // Changed to string array
   reason: string;
 }
 
