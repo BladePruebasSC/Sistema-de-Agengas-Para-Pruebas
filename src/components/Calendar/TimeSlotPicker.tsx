@@ -2,14 +2,15 @@ import React from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
-import { generateTimeSlots, formatTime, isBusinessHour } from '../../utils/businessHours';
+import { generateTimeSlots } from '../../utils/businessHours';
+import { Clock } from 'lucide-react';
 
 interface TimeSlotPickerProps {
   date: Date;
   onSelectTime: (time: string) => void;
   selectedTime: string | null;
   isHoliday: boolean;
-  availableHours: string[]; // Añadir esta prop
+  availableHours: string[];
 }
 
 const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({ 
@@ -21,51 +22,16 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
 }) => {
   const { blockedTimes, appointments } = useAppointments();
   
-  // Encontrar los horarios bloqueados para la fecha seleccionada
-  const blockedTimesForDate = blockedTimes.find(
-    block => 
-      block.date.getFullYear() === date.getFullYear() &&
-      block.date.getMonth() === date.getMonth() &&
-      block.date.getDate() === date.getDate()
-  );
-  
-  // Encontrar las citas para la fecha seleccionada
-  const appointmentsForDate = appointments.filter(
-    app =>
-      app.date.getFullYear() === date.getFullYear() &&
-      app.date.getMonth() === date.getMonth() &&
-      app.date.getDate() === date.getDate()
-  );
-  
-  const isTimeSlotAvailable = (time: string): boolean => {
-    // Verificar si el horario está bloqueado
-    if (blockedTimesForDate?.timeSlots.includes(time)) {
-      return false;
-    }
-    
-    // Verificar si hay una cita en ese horario
-    if (appointmentsForDate.some(app => app.time === time)) {
-      return false;
-    }
-    
-    return true;
-  };
-  
-  const allTimeSlots = generateTimeSlots(date);
-  
   if (isHoliday) {
     return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
-        <p className="text-red-600 font-medium">Este día está marcado como feriado.</p>
-        <p className="text-red-500 mt-1">No hay citas disponibles.</p>
-      </div>
-    );
-  }
-  
-  if (allTimeSlots.length === 0) {
-    return (
-      <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
-        <p className="text-gray-600 font-medium">No hay horarios disponibles para este día.</p>
+      <div className="p-6 bg-red-50 border border-red-200 rounded-lg">
+        <div className="flex items-center justify-center text-red-600 mb-2">
+          <Clock className="w-6 h-6 mr-2" />
+          <h3 className="text-lg font-medium">Día No Disponible</h3>
+        </div>
+        <p className="text-red-500 text-center">
+          Este día está marcado como feriado y no hay citas disponibles.
+        </p>
       </div>
     );
   }
@@ -76,30 +42,54 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-      {allHours.map((hour) => {
-        const isAvailable = availableHours.includes(hour);
-        return (
-          <button
-            key={hour}
-            onClick={() => isAvailable && onSelectTime(hour)}
-            disabled={!isAvailable || isHoliday}
-            className={`
-              p-3 rounded-lg text-center transition-all
-              ${selectedTime === hour 
-                ? 'bg-red-600 text-white' 
-                : isAvailable && !isHoliday
-                  ? 'bg-green-100 hover:bg-green-200 text-green-800'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
-            `}
-          >
-            {hour}
-            {!isAvailable && (
-              <span className="block text-xs">No disponible</span>
-            )}
-          </button>
-        );
-      })}
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {allHours.map((hour) => {
+          const isAvailable = availableHours.includes(hour);
+          const isSelected = selectedTime === hour;
+          
+          return (
+            <button
+              key={hour}
+              onClick={() => isAvailable && onSelectTime(hour)}
+              disabled={!isAvailable || isHoliday}
+              className={`
+                relative p-4 rounded-lg text-center transition-all duration-200
+                ${isSelected 
+                  ? 'bg-red-600 text-white shadow-lg transform scale-105' 
+                  : isAvailable
+                    ? 'bg-green-50 hover:bg-green-100 text-green-800 hover:shadow-md'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
+              `}
+            >
+              <div className="flex flex-col items-center">
+                <Clock className={`w-5 h-5 mb-1 ${isSelected ? 'text-white' : isAvailable ? 'text-green-600' : 'text-gray-400'}`} />
+                <span className="font-medium">{hour}</span>
+                {!isAvailable && (
+                  <span className="absolute bottom-1 left-0 right-0 text-xs text-gray-500">
+                    No disponible
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 justify-center text-sm">
+        <div className="flex items-center">
+          <div className="w-3 h-3 rounded-full bg-green-50 border border-green-600 mr-1"></div>
+          <span className="text-gray-600">Disponible</span>
+        </div>
+        <div className="flex items-center">
+          <div className="w-3 h-3 rounded-full bg-red-600 mr-1"></div>
+          <span className="text-gray-600">Seleccionado</span>
+        </div>
+        <div className="flex items-center">
+          <div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-300 mr-1"></div>
+          <span className="text-gray-600">No disponible</span>
+        </div>
+      </div>
     </div>
   );
 };
