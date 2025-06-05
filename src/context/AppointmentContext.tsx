@@ -274,10 +274,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 };
 
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
-    try {
-      const formattedDate = formatDateForSupabase(holidayData.date);
-      
-      const { data: existingHoliday } = await supabase
+  try {
+    const formattedDate = formatDateForSupabase(holidayData.date);
+    
+    const { data: existingHoliday } = await supabase
           .from('holidays')
           .select('*')
           .eq('date', formattedDate)
@@ -298,22 +298,60 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
       setHolidays(prev => [...prev, newHoliday]);
 
-      // Send SMS to all clients with appointments
-      try {
-        const phones = getAllRegisteredPhones(appointments);
-        for (const phone of phones) {
+      // Notify clients with appointments on this date
+      const appointmentsOnDate = appointments.filter(app => 
+        isSameDay(app.date, holidayData.date)
+      );
+
+      for (const appointment of appointmentsOnDate) {
+        try {
           await sendSMSMessage({
-            clientPhone: phone,
-            body: `Gaston Stylo: Se ha agregado un día feriado para el ${format(newHoliday.date, 'dd/MM/yyyy')}.`
+            clientPhone: appointment.clientPhone,
+            body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`
           });
+        } catch (smsError) {
+          console.error('Error al enviar SMS:', smsError);
         }
-      } catch (smsError) {
-        console.error('Error al enviar SMS:', smsError);
       }
 
       return newHoliday;
     } catch (error) {
       console.error('Error creating holiday:', error);
+      throw error;
+    }
+  };
+
+  const removeHoliday = async (id: string): Promise<void> => {
+    try {
+      const holidayToRemove = holidays.find(h => h.id === id);
+      if (!holidayToRemove) return;
+
+      const { error } = await supabase
+          .from('holidays')
+          .delete()
+          .eq('id', id);
+
+      if (error) throw error;
+
+      setHolidays(prev => prev.filter(h => h.id !== id));
+
+      // Notify clients with appointments on this date
+      const appointmentsOnDate = appointments.filter(app => 
+        isSameDay(app.date, holidayToRemove.date)
+      );
+
+      for (const appointment of appointmentsOnDate) {
+        try {
+          await sendSMSMessage({
+            clientPhone: appointment.clientPhone,
+            body: `Gaston Stylo: Este dia ahora se encuentra disponible para citas (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`
+          });
+        } catch (smsError) {
+          console.error('Error al enviar SMS:', smsError);
+        }
+      }
+    } catch (error) {
+      console.error('Error removing holiday:', error);
       throw error;
     }
   };
@@ -347,19 +385,19 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     setBlockedTimes(prev => [...prev, newBlockedTime]);
 
-    // Only try to notify clients with existing appointments on this date
-    const appointmentsOnDate = appointments.filter(app => 
-      isSameDay(app.date, newBlockedTime.date)
+    // Notify clients with appointments at this time
+    const appointmentsAtTime = appointments.filter(app => 
+      isSameDay(app.date, blockedTimeData.date) && app.time === blockedTimeData.timeSlots
     );
 
-    for (const appointment of appointmentsOnDate) {
+    for (const appointment of appointmentsAtTime) {
       try {
         await sendSMSMessage({
           clientPhone: appointment.clientPhone,
-          body: `Gaston Stylo: El horario de las ${newBlockedTime.time} del ${format(newBlockedTime.date, 'dd/MM/yyyy')} ha sido bloqueado.`
+          body: `Gaston Stylo: Esta hora no esta disponible para citas (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
         });
-      } catch (error) {
-        console.error('SMS notification error:', error);
+      } catch (smsError) {
+        console.error('Error al enviar SMS:', smsError);
       }
     }
 
@@ -370,78 +408,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   }
 };
 
-  const deleteAppointment = async (id: string): Promise<void> => {
-    try {
-      const appointmentToDelete = appointments.find(app => app.id === id);
-      if (!appointmentToDelete) return;
-
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error('Error deleting appointment:', error);
-        return;
-      }
-
-      // Update local state silently
-      setAppointments(prev => prev.filter(app => app.id !== id));
-
-      // Try to send SMS but don't show any errors
-      try {
-        await sendSMSMessage({
-          clientPhone: appointmentToDelete.clientPhone,
-          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`
-        });
-      } catch (error) {
-        console.error('SMS error:', error);
-      }
-    } catch (error) {
-      console.error('Delete error:', error);
-    }
-  };
-
-  const removeHoliday = async (id: string): Promise<void> => {
-    try {
-        const holidayToRemove = holidays.find(h => h.id === id);
-        if (!holidayToRemove) {
-            throw new Error('Feriado no encontrado');
-        }
-
-        const { error } = await supabase
-            .from('holidays')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
-
-        setHolidays(prev => prev.filter(h => h.id !== id));
-
-        // Send SMS to all clients with appointments
-        try {
-          const phones = getAllRegisteredPhones(appointments);
-          for (const phone of phones) {
-            await sendSMSMessage({
-              clientPhone: phone,
-              body: `Gaston Stylo: Se ha eliminado el feriado del ${format(holidayToRemove.date, 'dd/MM/yyyy')}.`
-            });
-          }
-        } catch (smsError) {
-          console.error('Error al enviar SMS:', smsError);
-        }
-    } catch (error) {
-        console.error('Error removing holiday:', error);
-        throw error;
-    }
-  };
-
   const removeBlockedTime = async (id: string): Promise<void> => {
     try {
         const blockedTimeToRemove = blockedTimes.find(bt => bt.id === id);
-        if (!blockedTimeToRemove) {
-            throw new Error('Horario bloqueado no encontrado');
-        }
+        if (!blockedTimeToRemove) return;
 
         const { error } = await supabase
             .from('blocked_times')
@@ -452,17 +422,20 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
         setBlockedTimes(prev => prev.filter(bt => bt.id !== id));
 
-        // Send SMS to all clients with appointments
-        try {
-          const phones = getAllRegisteredPhones(appointments);
-          for (const phone of phones) {
+        // Notify clients with appointments at this time
+        const appointmentsAtTime = appointments.filter(app => 
+          isSameDay(app.date, blockedTimeToRemove.date) && app.time === blockedTimeToRemove.timeSlots
+        );
+
+        for (const appointment of appointmentsAtTime) {
+          try {
             await sendSMSMessage({
-              clientPhone: phone,
-              body: `Gaston Stylo: Se ha desbloqueado el horario de las ${blockedTimeToRemove.time} del ${format(blockedTimeToRemove.date, 'dd/MM/yyyy')}.`
+              clientPhone: appointment.clientPhone,
+              body: `Gaston Stylo: Esta hora esta disponible para citas (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
             });
+          } catch (smsError) {
+            console.error('Error al enviar SMS:', smsError);
           }
-        } catch (smsError) {
-          console.error('Error al enviar SMS:', smsError);
         }
     } catch (error) {
         console.error('Error removing blocked time:', error);
