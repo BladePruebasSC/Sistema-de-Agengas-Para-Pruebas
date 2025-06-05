@@ -2,10 +2,10 @@ import { Appointment, Holiday, BlockedTime, Service } from '../types';
 
 // Sample services
 export const services: Service[] = [
-  { id: '1', name: 'Corte Normal', price: 500, duration: 45 },
-  { id: '2', name: 'Corte + Barba', price: 700, duration: 45 },
-  { id: '3', name: 'Corte Normal + Cejas', price: 600, duration: 45 },
-  { id: '4', name: 'Corte + Barba + Ceja', price: 800, duration: 45 },
+  { id: '1', name: 'Adulto Clasico', price: 1200, duration: 45 },
+  { id: '2', name: 'Adulto con Barba', price: 1500, duration: 45 },
+  { id: '3', name: 'Joven', price: 800, duration: 45 },
+  { id: '4', name: 'Cerquillo', price: 500, duration: 45 },
 ];
 
 // Initial mock appointments

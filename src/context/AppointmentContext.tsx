@@ -277,49 +277,65 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   try {
     const formattedDate = formatDateForSupabase(holidayData.date);
     
-    const { data: existingHoliday } = await supabase
-          .from('holidays')
-          .select('*')
-          .eq('date', formattedDate)
-          .single();
+    // Primero verifica si ya existe un feriado en esa fecha
+    const { data: existingHolidays, error: checkError } = await supabase
+      .from('holidays')
+      .select('*')
+      .eq('date', formattedDate);
 
-      if (existingHoliday) {
-          throw new Error('Ya existe un feriado en esta fecha');
-      }
+    if (checkError) {
+      console.error('Error checking existing holiday:', checkError);
+      throw checkError;
+    }
 
-      const { data, error } = await supabase
-          .from('holidays')
-          .insert([{ ...holidayData, date: formattedDate }])
-          .select()
-          .single();
+    if (existingHolidays && existingHolidays.length > 0) {
+      throw new Error('Ya existe un feriado en esta fecha');
+    }
 
-      if (error) throw error;
+    // Si no existe, crea el nuevo feriado
+    const { data, error } = await supabase
+      .from('holidays')
+      .insert([{ 
+        ...holidayData,
+        date: formattedDate 
+      }])
+      .select()
+      .single();
 
-      const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
-      setHolidays(prev => [...prev, newHoliday]);
-
-      // Notify clients with appointments on this date
-      const appointmentsOnDate = appointments.filter(app => 
-        isSameDay(app.date, holidayData.date)
-      );
-
-      for (const appointment of appointmentsOnDate) {
-        try {
-          await sendSMSMessage({
-            clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`
-          });
-        } catch (smsError) {
-          console.error('Error al enviar SMS:', smsError);
-        }
-      }
-
-      return newHoliday;
-    } catch (error) {
+    if (error) {
       console.error('Error creating holiday:', error);
       throw error;
     }
-  };
+
+    const newHoliday = { 
+      ...data, 
+      date: parseSupabaseDate(data.date) 
+    };
+
+    setHolidays(prev => [...prev, newHoliday]);
+
+    // Notificar a los clientes con citas en esa fecha
+    const appointmentsOnDate = appointments.filter(app => 
+      isSameDay(app.date, holidayData.date)
+    );
+
+    for (const appointment of appointmentsOnDate) {
+      try {
+        await sendSMSMessage({
+          clientPhone: appointment.clientPhone,
+          body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`
+        });
+      } catch (smsError) {
+        console.error('Error al enviar SMS:', smsError);
+      }
+    }
+
+    return newHoliday;
+  } catch (error) {
+    console.error('Error creating holiday:', error);
+    throw error;
+  }
+};
 
   const removeHoliday = async (id: string): Promise<void> => {
     try {

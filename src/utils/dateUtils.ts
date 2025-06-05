@@ -1,16 +1,8 @@
 export const formatDateForSupabase = (date: Date): string => {
-    // Crear una nueva fecha ajustando la zona horaria a UTC-4 (Santo Domingo)
-    const offset = -4; // UTC-4
-    const localDate = new Date(date);
-    const utcDate = new Date(
-        localDate.getUTCFullYear(),
-        localDate.getUTCMonth(),
-        localDate.getUTCDate(),
-        localDate.getUTCHours() - offset
-    );
-    
-    // Formatear como YYYY-MM-DD
-    return utcDate.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export const parseSupabaseDate = (dateStr: string): Date => {
