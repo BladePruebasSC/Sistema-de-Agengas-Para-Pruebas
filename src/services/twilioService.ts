@@ -31,7 +31,7 @@ const formatPhoneNumber = (phone: string): string => {
 export const sendSMSMessage = async (data: TwilioMessageData) => {
   try {
     if (!data?.clientPhone) {
-      console.log('No se proporcionó número de teléfono');
+      console.log('No phone number provided for SMS, skipping...');
       return null;
     }
 
@@ -40,14 +40,20 @@ export const sendSMSMessage = async (data: TwilioMessageData) => {
     const fromNumber = import.meta.env.VITE_TWILIO_PHONE_NUMBER;
 
     if (!accountSid || !authToken || !fromNumber) {
-      console.error('Faltan credenciales de Twilio:', { accountSid, authToken, fromNumber });
+      console.log('Missing Twilio credentials, skipping SMS...');
       return null;
     }
 
-    console.log('Enviando SMS a:', data.clientPhone); // Debug log
+    // Check if number is from DR
+    if (!isDRNumber(data.clientPhone)) {
+      console.log('Not a DR number, skipping SMS...');
+      return null;
+    }
+
+    const toNumber = formatPhoneNumber(data.clientPhone);
 
     const formData = new URLSearchParams();
-    formData.append('To', formatPhoneNumber(data.clientPhone));
+    formData.append('To', toNumber);
     formData.append('From', fromNumber);
     formData.append('Body', data.body);
 
@@ -61,15 +67,17 @@ export const sendSMSMessage = async (data: TwilioMessageData) => {
     });
 
     const responseData = await response.json();
-    console.log('Respuesta de Twilio:', responseData); // Debug log
 
     if (!response.ok) {
-      throw new Error(responseData.message || 'Error al enviar SMS');
+      // Don't throw error, just log it
+      console.warn('SMS sending failed:', responseData);
+      return null;
     }
 
     return responseData;
   } catch (error) {
-    console.error('Error al enviar SMS:', error);
+    // Don't throw error, just log it
+    console.warn('Error sending SMS:', error);
     return null;
   }
 };

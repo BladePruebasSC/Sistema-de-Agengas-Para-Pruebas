@@ -5,6 +5,7 @@ import Calendar from 'react-calendar';
 import { useAppointments } from '../../context/AppointmentContext';
 import TimeSlotPicker from './TimeSlotPicker';
 import { isBusinessHour } from '../../utils/businessHours';
+import { isTimeSlotAvailable } from '../../utils/mockData';
 import './Calendar.css';
 
 interface CalendarViewProps {
@@ -24,7 +25,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 }) => {
   const { isTimeSlotAvailable, holidays } = useAppointments();
   const [availableHours, setAvailableHours] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const today = startOfDay(new Date());
 
   const allHours = [
@@ -32,18 +32,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
   ];
 
-  // Reset time selection when date changes
-  const handleDateChange = (date: Date) => {
-    onTimeChange(null); // Reset time selection
-    setAvailableHours([]); // Reset available hours
-    onDateChange(date); // Update parent component
-  };
-
-  // Check availability when date changes
+  // Verificar disponibilidad cuando se selecciona una fecha
   const checkAvailability = useCallback(async (date: Date) => {
-    if (!date) return;
-    
-    setIsLoading(true);
     try {
       const available = [];
       for (const hour of allHours) {
@@ -55,12 +45,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       setAvailableHours(available);
     } catch (error) {
       console.error('Error checking availability:', error);
-    } finally {
-      setIsLoading(false);
     }
   }, [isTimeSlotAvailable, allHours]);
 
-  // Update available hours when date changes
+  // Actualizar horas disponibles cuando cambia la fecha
   useEffect(() => {
     if (selectedDate) {
       checkAvailability(selectedDate);
@@ -107,6 +95,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return null;
   };
 
+  const handleTimeSelect = (time: string) => {
+    onTimeChange(time);
+  };
+
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="p-6">
@@ -115,7 +107,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             <h3 className="text-lg font-medium mb-3">1. Elige una Fecha</h3>
             <div className="calendar-container">
               <Calendar
-                onChange={handleDateChange}
+                onChange={onDateChange}
                 value={selectedDate}
                 tileClassName={tileClassName}
                 tileDisabled={tileDisabled}
@@ -138,19 +130,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               <h3 className="text-lg font-medium mb-3">
                 2. Elige un Horario - {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
               </h3>
-              {isLoading ? (
-                <div className="flex justify-center items-center h-48">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-                </div>
-              ) : (
-                <TimeSlotPicker
-                  date={selectedDate}
-                  onSelectTime={onTimeChange}
-                  selectedTime={selectedTime}
-                  isHoliday={isHoliday(selectedDate)}
-                  availableHours={availableHours}
-                />
-              )}
+              <TimeSlotPicker
+                date={selectedDate}
+                onSelectTime={handleTimeSelect}
+                selectedTime={selectedTime}
+                isHoliday={isHoliday(selectedDate)}
+                availableHours={availableHours}
+              />
             </div>
           )}
         </div>
@@ -159,4 +145,4 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   );
 };
 
-export default CalendarView;
+export default CalendarView
