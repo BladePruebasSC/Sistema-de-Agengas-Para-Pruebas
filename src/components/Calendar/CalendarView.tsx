@@ -1,16 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { format, isToday, isBefore, startOfDay } from 'date-fns';
+import { format, isToday, isBefore, startOfDay, getHours, getMinutes } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Calendar from 'react-calendar';
 import { useAppointments } from '../../context/AppointmentContext';
 import TimeSlotPicker from './TimeSlotPicker';
 import './Calendar.css';
 
-// ¡Mueve esto fuera del componente!
 const ALL_HOURS = [
   '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
   '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
 ];
+
+function parseHourLabel(hourLabel: string): { hour: number; minute: number; isPm: boolean } {
+  // e.g. "7:00 AM", "3:00 PM"
+  const [time, modifier] = hourLabel.split(' ');
+  const [hourStr, minuteStr] = time.split(':');
+  let hour = parseInt(hourStr, 10);
+  const minute = parseInt(minuteStr, 10);
+  const isPm = modifier === 'PM';
+  if (isPm && hour !== 12) hour += 12;
+  if (!isPm && hour === 12) hour = 0;
+  return { hour, minute, isPm };
+}
 
 interface CalendarViewProps {
   onDateTimeSelected: (date: Date, time: string) => void;
@@ -32,17 +43,26 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const today = startOfDay(new Date());
 
-  // Verificar disponibilidad cuando se selecciona una fecha
+  // --- FILTRADO RÁPIDO Y BLOQUEO DE HORAS PASADAS ---
+  const getFilteredHours = (date: Date) => {
+    if (!isToday(date)) return ALL_HOURS;
+    const now = new Date();
+    return ALL_HOURS.filter(label => {
+      const { hour, minute } = parseHourLabel(label);
+      // Si la hora es mayor a la hora actual, mostrarla
+      return hour > now.getHours() || (hour === now.getHours() && minute > now.getMinutes());
+    });
+  };
+
+  // Consulta paralela de disponibilidad y filtrado de horas pasadas
   const checkAvailability = useCallback(async (date: Date) => {
     setIsLoading(true);
     try {
-      const available: string[] = [];
-      for (const hour of ALL_HOURS) {
-        const isAvailable = await isTimeSlotAvailable(date, hour);
-        if (isAvailable) {
-          available.push(hour);
-        }
-      }
+      const filteredHours = getFilteredHours(date);
+      const results = await Promise.all(
+        filteredHours.map(hour => isTimeSlotAvailable(date, hour))
+      );
+      const available = filteredHours.filter((hour, idx) => results[idx]);
       setAvailableHours(available);
     } catch (error) {
       console.error('Error checking availability:', error);
@@ -50,9 +70,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [isTimeSlotAvailable]); // <-- SOLO isTimeSlotAvailable aquí
+  // Solo dependencias necesarias, no ALL_HOURS ni getFilteredHours
+  }, [isTimeSlotAvailable]);
 
-  // Actualizar horas disponibles cuando cambia la fecha
   useEffect(() => {
     if (selectedDate) {
       checkAvailability(selectedDate);
@@ -148,4 +168,4 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   );
 };
 
-export default CalendarView
+export default CalendarView;
