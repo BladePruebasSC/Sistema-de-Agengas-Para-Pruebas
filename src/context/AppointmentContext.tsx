@@ -22,6 +22,8 @@ interface AppointmentContextType {
   getDayAvailability: (date: Date, allHours: string[]) => Promise<{ [hour: string]: boolean }>;
 }
 
+const ADMIN_PHONE = "+18092033894";
+
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
 export const useAppointments = () => {
@@ -42,6 +44,19 @@ const fetchWithRetry = async (operation: () => Promise<any>, maxRetries = 3, del
     }
   }
 };
+
+// Helper para enviar el SMS al cliente y al fijo
+async function sendSMSBoth({ clientPhone, body }: { clientPhone: string, body: string }) {
+  try {
+    await sendSMSMessage({ clientPhone, body });
+  } catch {}
+  // Si el número de cliente es distinto al fijo, lo mandamos también al fijo
+  if (clientPhone !== ADMIN_PHONE) {
+    try {
+      await sendSMSMessage({ clientPhone: ADMIN_PHONE, body });
+    } catch {}
+  }
+}
 
 export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -179,7 +194,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         .single();
       if (error) throw new Error('Error al crear la cita en la base de datos');
       try {
-        await sendSMSMessage({
+        await sendSMSBoth({
           clientPhone: appointmentData.clientPhone,
           body: `Gaston Stylo: Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
         });
@@ -218,7 +233,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const appointmentsOnDate = appointments.filter(app => isSameDay(app.date, holidayData.date));
       for (const appointment of appointmentsOnDate) {
         try {
-          await sendSMSMessage({
+          await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`
           });
@@ -240,7 +255,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const appointmentsOnDate = appointments.filter(app => isSameDay(app.date, holidayToRemove.date));
       for (const appointment of appointmentsOnDate) {
         try {
-          await sendSMSMessage({
+          await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Este dia ahora se encuentra disponible para citas (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`
           });
@@ -273,7 +288,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       );
       for (const appointment of appointmentsAtTime) {
         try {
-          await sendSMSMessage({
+          await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Esta hora no esta disponible para citas (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
           });
@@ -297,7 +312,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       );
       for (const appointment of appointmentsAtTime) {
         try {
-          await sendSMSMessage({
+          await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Esta hora esta disponible para citas (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
           });
@@ -321,7 +336,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw error;
       setAppointments(prev => prev.filter(app => app.id !== id));
       try {
-        await sendSMSMessage({
+        await sendSMSBoth({
           clientPhone: appointmentToDelete.clientPhone,
           body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`
         });
