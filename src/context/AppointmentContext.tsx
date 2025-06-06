@@ -19,8 +19,54 @@ interface AppointmentContextType {
   removeHoliday: (id: string) => Promise<void>;
   removeBlockedTime: (id: string) => Promise<void>;
   isTimeSlotAvailable: (date: Date, time: string) => Promise<boolean>;
-  getDayAvailability: (date: Date, allHours: string[]) => Promise<{ [hour: string]: boolean }>;
+  getDayAvailability: (date: Date) => Promise<{ [hour: string]: boolean }>;
+  getAvailableHoursForDate: (date: Date) => string[];
+  formatHour12h: (hour24: string) => string;
 }
+
+// Genera un rango de horas en formato HH:00
+const generateHoursRange = (start: number, end: number) => {
+  const hours: string[] = [];
+  for (let h = start; h <= end; h++) {
+    hours.push(`${h.toString().padStart(2, '0')}:00`);
+  }
+  return hours;
+};
+
+// HORARIOS:
+// Domingo: 10:00 a 15:00
+// Miércoles: 7:00 a 12:00 y 15:00 a 19:00
+// Resto: 7:00 a 12:00 y 15:00 a 21:00
+const getAvailableHoursForDate = (date: Date): string[] => {
+  const weekday = date.getDay();
+  if (weekday === 0) {
+    // Domingo
+    return generateHoursRange(10, 15);
+  } else if (weekday === 3) {
+    // Miércoles
+    return [
+      ...generateHoursRange(7, 12),
+      ...generateHoursRange(15, 19)
+    ];
+  } else {
+    // Lunes, martes, jueves, viernes, sábado
+    return [
+      ...generateHoursRange(7, 12),
+      ...generateHoursRange(15, 21)
+    ];
+  }
+};
+
+// Convierte "15:00" en "3:00 pm" para mostrar en UI
+const formatHour12h = (hour24: string): string => {
+  if (!hour24) return '';
+  const [h, m] = hour24.split(':');
+  let hour = parseInt(h, 10);
+  const minute = m || '00';
+  const ampm = hour >= 12 ? 'pm' : 'am';
+  hour = hour % 12 || 12;
+  return `${hour}:${minute} ${ampm}`;
+};
 
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
@@ -30,17 +76,6 @@ export const useAppointments = () => {
     throw new Error('useAppointments must be used within an AppointmentProvider');
   }
   return context;
-};
-
-const fetchWithRetry = async (operation: () => Promise<any>, maxRetries = 3, delay = 1000) => {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
-    }
-  }
 };
 
 export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -109,63 +144,61 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const isTimeSlotAvailable = useCallback(async (date: Date, time: string): Promise<boolean> => {
     try {
       const formattedDate = formatDateForSupabase(date);
-      const isHoliday = holidays.some(holiday =>
-        holiday.date.getFullYear() === date.getFullYear() &&
-        holiday.date.getMonth() === date.getMonth() &&
-        holiday.date.getDate() === date.getDate()
-      );
-      if (isHoliday) return false;
-      const isBlocked = blockedTimes.some(block =>
-        block.date.getFullYear() === date.getFullYear() &&
-        block.date.getMonth() === date.getMonth() &&
-        block.date.getDate() === date.getDate() &&
-        (block.timeSlots?.includes(time) || block.time === time)
-      );
-      if (isBlocked) return false;
-      const hasExistingAppointment = appointments.some(app =>
-        app.date.getFullYear() === date.getFullYear() &&
-        app.date.getMonth() === date.getMonth() &&
-        app.date.getDate() === date.getDate() &&
-        app.time === time
-      );
-      if (hasExistingAppointment) return false;
-      const { data: existingAppointment, error } = await supabase
-        .from('appointments')
-        .select('id')
-        .eq('date', formattedDate)
-        .eq('time', time)
-        .maybeSingle();
-      if (error) return false;
-      return !existingAppointment;
-    } catch {
+      const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([
+        supabase.from('holidays').select('id').eq('date', formattedDate),
+        supabase.from('blocked_times').select('time,timeSlots').eq('date', formattedDate),
+        supabase.from('appointments').select('id,time').eq('date', formattedDate).eq('time', time)
+      ]);
+      if (holidaysData && holidaysData.length > 0) return false;
+      if (blockedData && blockedData.some(block =>
+        (block.time && block.time === time) ||
+        (block.timeSlots && Array.isArray(block.timeSlots) && block.timeSlots.includes(time))
+      )) return false;
+      if (appointmentsData && appointmentsData.length > 0) return false;
+      return true;
+    } catch (err) {
       return false;
     }
-  }, [holidays, blockedTimes, appointments]);
+  }, []);
 
-  const getDayAvailability = useCallback(async (date: Date, allHours: string[]) => {
+  const getDayAvailability = useCallback(async (date: Date) => {
     const formattedDate = formatDateForSupabase(date);
-    const [{ data: dayAppointments }, { data: dayBlocks }, { data: dayHolidays }] = await Promise.all([
-      supabase.from('appointments').select('time').eq('date', formattedDate),
-      supabase.from('blocked_times').select('time, timeSlots').eq('date', formattedDate),
+    const hours = getAvailableHoursForDate(date);
+    if (hours.length === 0) return {};
+
+    const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([
       supabase.from('holidays').select('id').eq('date', formattedDate),
+      supabase.from('blocked_times').select('time,timeSlots').eq('date', formattedDate),
+      supabase.from('appointments').select('time').eq('date', formattedDate),
     ]);
-    if (dayHolidays && dayHolidays.length > 0) {
-      return Object.fromEntries(allHours.map(h => [h, false]));
+
+    const availability: { [hour: string]: boolean } = {};
+    if (holidaysData && holidaysData.length > 0) {
+      hours.forEach(h => { availability[h] = false; });
+      return availability;
     }
-    let blockedSlots: string[] = [];
-    if (dayBlocks) {
-      for (const block of dayBlocks) {
-        if (block.timeSlots && Array.isArray(block.timeSlots)) blockedSlots = blockedSlots.concat(block.timeSlots);
-        if (block.time) blockedSlots.push(block.time);
+
+    const blockedSlots = new Set<string>();
+    if (blockedData) {
+      for (const block of blockedData) {
+        if (block.timeSlots && Array.isArray(block.timeSlots)) {
+          block.timeSlots.forEach((slot: string) => blockedSlots.add(slot));
+        }
+        if (block.time) blockedSlots.add(block.time);
       }
     }
-    const result: { [hour: string]: boolean } = {};
-    for (const hour of allHours) {
-      const hasAppointment = dayAppointments?.some(app => app.time === hour);
-      const isBlocked = blockedSlots.includes(hour);
-      result[hour] = !hasAppointment && !isBlocked;
+
+    const takenSlots = new Set<string>();
+    if (appointmentsData) {
+      for (const app of appointmentsData) {
+        if (app.time) takenSlots.add(app.time);
+      }
     }
-    return result;
+
+    for (const hour of hours) {
+      availability[hour] = !(blockedSlots.has(hour) || takenSlots.has(hour));
+    }
+    return availability;
   }, []);
 
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
@@ -181,7 +214,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         await sendSMSBoth({
           clientPhone: appointmentData.clientPhone,
           body: `Gaston Stylo: Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`,
-          adminBody: `Nueva cita creada por ${appointmentData.clientName} para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
+          adminBody: `Nueva cita creada por ${appointmentData.clientName || 'Cliente'} para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
         });
       } catch {}
       const parsedAppointment = {
@@ -214,14 +247,13 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw error;
       const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
       setHolidays(prev => [...prev, newHoliday]);
-      // Notificar a los clientes con citas en esa fecha
       const appointmentsOnDate = appointments.filter(app => isSameDay(app.date, holidayData.date));
       for (const appointment of appointmentsOnDate) {
         try {
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`,
-            adminBody: `Aviso: ${appointment.clientName} tenía cita el día bloqueado (${format(holidayData.date, 'dd/MM/yyyy')}).`
+            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} tenía cita el día bloqueado (${format(holidayData.date, 'dd/MM/yyyy')}).`
           });
         } catch {}
       }
@@ -244,7 +276,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Este dia ahora se encuentra disponible para citas (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`,
-            adminBody: `Aviso: ${appointment.clientName} puede volver a agendar el día liberado (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`
+            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} puede volver a agendar el día liberado (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`
           });
         } catch {}
       }
@@ -278,7 +310,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Esta hora no esta disponible para citas (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`,
-            adminBody: `Aviso: ${appointment.clientName} tenía cita en hora bloqueada (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
+            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} tenía cita en hora bloqueada (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
           });
         } catch {}
       }
@@ -303,7 +335,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
             body: `Gaston Stylo: Esta hora esta disponible para citas (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`,
-            adminBody: `Aviso: ${appointment.clientName} puede reservar la hora liberada (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
+            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} puede reservar la hora liberada (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
           });
         } catch {}
       }
@@ -328,7 +360,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         await sendSMSBoth({
           clientPhone: appointmentToDelete.clientPhone,
           body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`,
-          adminBody: `Cita cancelada por ${appointmentToDelete.clientName} para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time}.`
+          adminBody: `Cita cancelada por ${appointmentToDelete.clientName || 'Cliente'} para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time}.`
         });
       } catch {}
     } catch (error) {}
@@ -348,6 +380,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     removeBlockedTime,
     isTimeSlotAvailable,
     getDayAvailability,
+    getAvailableHoursForDate,
+    formatHour12h,
   };
 
   return (
