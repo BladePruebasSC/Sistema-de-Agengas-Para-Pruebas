@@ -22,7 +22,7 @@ interface AppointmentContextType {
   getDayAvailability: (date: Date, allHours: string[]) => Promise<{ [hour: string]: boolean }>;
 }
 
-const ADMIN_PHONE = "+18092033894";
+const ADMIN_PHONE = "18092033894";
 
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
