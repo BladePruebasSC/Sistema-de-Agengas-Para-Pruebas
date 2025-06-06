@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { sendSMSBoth } from '../services/twilioService'; // <-- CAMBIO AQUÍ
+import { sendSMSBoth } from '../services/twilioService';
 import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
 import { format, isSameDay } from 'date-fns';
 
@@ -21,8 +21,6 @@ interface AppointmentContextType {
   isTimeSlotAvailable: (date: Date, time: string) => Promise<boolean>;
   getDayAvailability: (date: Date, allHours: string[]) => Promise<{ [hour: string]: boolean }>;
 }
-
-// Ya NO necesitas declarar ADMIN_PHONE ni el helper sendSMSBoth aquí.
 
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
@@ -144,7 +142,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   }, [holidays, blockedTimes, appointments]);
 
-  // *** NUEVA FUNCIÓN OPTIMIZADA ***
   const getDayAvailability = useCallback(async (date: Date, allHours: string[]) => {
     const formattedDate = formatDateForSupabase(date);
     const [{ data: dayAppointments }, { data: dayBlocks }, { data: dayHolidays }] = await Promise.all([
@@ -183,7 +180,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       try {
         await sendSMSBoth({
           clientPhone: appointmentData.clientPhone,
-          body: `Gaston Stylo: Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
+          body: `Gaston Stylo: Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`,
+          adminBody: `Nueva cita creada por ${appointmentData.clientName} para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
         });
       } catch {}
       const parsedAppointment = {
@@ -222,7 +220,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         try {
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`
+            body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`,
+            adminBody: `Aviso: ${appointment.clientName} tenía cita el día bloqueado (${format(holidayData.date, 'dd/MM/yyyy')}).`
           });
         } catch {}
       }
@@ -244,7 +243,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         try {
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Este dia ahora se encuentra disponible para citas (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`
+            body: `Gaston Stylo: Este dia ahora se encuentra disponible para citas (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`,
+            adminBody: `Aviso: ${appointment.clientName} puede volver a agendar el día liberado (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`
           });
         } catch {}
       }
@@ -277,7 +277,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         try {
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Esta hora no esta disponible para citas (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
+            body: `Gaston Stylo: Esta hora no esta disponible para citas (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`,
+            adminBody: `Aviso: ${appointment.clientName} tenía cita en hora bloqueada (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
           });
         } catch {}
       }
@@ -301,7 +302,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         try {
           await sendSMSBoth({
             clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Esta hora esta disponible para citas (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
+            body: `Gaston Stylo: Esta hora esta disponible para citas (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`,
+            adminBody: `Aviso: ${appointment.clientName} puede reservar la hora liberada (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
           });
         } catch {}
       }
@@ -325,7 +327,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       try {
         await sendSMSBoth({
           clientPhone: appointmentToDelete.clientPhone,
-          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`
+          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`,
+          adminBody: `Cita cancelada por ${appointmentToDelete.clientName} para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time}.`
         });
       } catch {}
     } catch (error) {}

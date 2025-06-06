@@ -7,7 +7,6 @@ const ADMIN_PHONE = '+18092033894';
 const isDRNumber = (phone: string): boolean => {
   const drAreaCodes = ['809', '829', '849'];
   const cleanPhone = phone.replace(/\D/g, '');
-  // Si el número tiene 11 dígitos y empieza con '1', quita el primer dígito
   const phoneToCheck =
     cleanPhone.length === 11 && cleanPhone.startsWith('1')
       ? cleanPhone.slice(1)
@@ -21,7 +20,6 @@ const formatPhoneNumber = (phone: string): string => {
   }
   let cleanPhone = phone.replace(/\D/g, '');
   cleanPhone = cleanPhone.replace(/^0+/, '');
-  // Si ya tiene el país, no lo agregues de nuevo
   if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
     return '+' + cleanPhone;
   }
@@ -30,6 +28,10 @@ const formatPhoneNumber = (phone: string): string => {
   }
   throw new Error('Número inválido: Debe ser un número válido de República Dominicana (809, 829, o 849)');
 };
+
+export interface TwilioMessageDataWithAdmin extends TwilioMessageData {
+  adminBody?: string;
+}
 
 export const sendSMSMessage = async (data: TwilioMessageData) => {
   try {
@@ -82,15 +84,21 @@ export const sendSMSMessage = async (data: TwilioMessageData) => {
   }
 };
 
-// Envía al cliente y al admin (si no es el mismo número)
-export const sendSMSBoth = async (data: TwilioMessageData) => {
+// Envía al cliente y al admin (si no es el mismo número), con mensaje personalizado al admin
+export const sendSMSBoth = async (data: TwilioMessageDataWithAdmin) => {
   const results = [];
   // Envía al cliente
   results.push(await sendSMSMessage(data));
-  // Si el cliente no es el admin, envía también al admin
+  // Si el cliente no es el admin, envía también al admin con mensaje personalizado si existe
   const formattedClient = formatPhoneNumber(data.clientPhone);
   if (formattedClient !== ADMIN_PHONE) {
-    results.push(await sendSMSMessage({ ...data, clientPhone: ADMIN_PHONE }));
+    results.push(
+      await sendSMSMessage({
+        ...data,
+        clientPhone: ADMIN_PHONE,
+        body: data.adminBody || data.body, // Usa adminBody si existe, si no usa body normal
+      })
+    );
   }
   return results;
 };
