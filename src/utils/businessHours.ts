@@ -4,11 +4,11 @@ import { DayOfWeek, BusinessHours } from '../types';
 export const businessHours: BusinessHours = {
   monday: {
     morning: { start: '07:00', end: '12:00' },
-    afternoon: { start: '15:00', end: '20:00' }
+    afternoon: { start: '15:00', end: '21:00' }
   },
   tuesday: {
     morning: { start: '07:00', end: '12:00' },
-    afternoon: { start: '15:00', end: '20:00' }
+    afternoon: { start: '15:00', end: '21:00' }
   },
   wednesday: {
     morning: { start: '07:00', end: '12:00' },
@@ -16,15 +16,15 @@ export const businessHours: BusinessHours = {
   },
   thursday: {
     morning: { start: '07:00', end: '12:00' },
-    afternoon: { start: '15:00', end: '20:00' }
+    afternoon: { start: '15:00', end: '21:00' }
   },
   friday: {
     morning: { start: '07:00', end: '12:00' },
-    afternoon: { start: '15:00', end: '20:00' }
+    afternoon: { start: '15:00', end: '21:00' }
   },
   saturday: {
     morning: { start: '07:00', end: '12:00' },
-    afternoon: { start: '15:00', end: '20:00' }
+    afternoon: { start: '15:00', end: '21:00' }
   },
   sunday: {
     morning: { start: '10:00', end: '15:00' }
