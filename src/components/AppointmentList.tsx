@@ -1,95 +1,62 @@
-import React from 'react';
-import { format } from 'date-fns';
-import { Calendar, Clock, User, Scissors, Trash2 } from 'lucide-react';
-import { useAppointments } from '../context/AppointmentContext';
-import toast from 'react-hot-toast';
+import React from "react";
+import { useAppointments } from "../context/AppointmentContext";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
 const AppointmentList: React.FC = () => {
-  const { appointments, deleteAppointment, userPhone } = useAppointments();
-  
-  // Filter appointments by user's phone number
-  const userAppointments = appointments.filter(app => app.clientPhone === userPhone);
-  
-  // Sort appointments by date and time
-  const sortedAppointments = [...userAppointments].sort((a, b) => {
-    const dateComparison = a.date.getTime() - b.date.getTime();
-    if (dateComparison !== 0) return dateComparison;
+  const { appointments } = useAppointments();
+
+  // Ordenar por fecha y hora
+  const sortedAppointments = [...appointments].sort((a, b) => {
+    const dateA = new Date(a.date);
+    const dateB = new Date(b.date);
+    if (dateA.getTime() !== dateB.getTime()) {
+      return dateA.getTime() - dateB.getTime();
+    }
     return a.time.localeCompare(b.time);
   });
 
-  const handleDelete = async (appointment: any) => {
-    try {
-      await deleteAppointment(appointment.id);
-      toast.success('Cita cancelada exitosamente');
-    } catch (error) {
-      toast.error('Error al cancelar la cita');
-    }
-  };
-  
   return (
-    <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
-      <div className="p-6">
-        <h2 className="text-2xl font-semibold mb-4">Mis Citas</h2>
-        
-        {sortedAppointments.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">No tienes citas programadas.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {sortedAppointments.map((appointment) => (
-              <div key={appointment.id} className="py-4 first:pt-0 last:pb-0">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                  <div className="flex items-start">
-                    <div className="rounded-md bg-red-50 p-2 mr-3">
-                      <Calendar className="h-6 w-6 text-red-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">{appointment.service}</h3>
-                      <div className="mt-1 text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <Calendar className="h-4 w-4 mr-1" />
-                          <span>{format(appointment.date, 'EEEE, MMMM d, yyyy')}</span>
-                        </div>
-                        <div className="flex items-center mt-1">
-                          <Clock className="h-4 w-4 mr-1" />
-                          <span>{appointment.time}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 md:mt-0 flex items-center space-x-4">
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center text-sm text-gray-600">
-                        <User className="h-4 w-4 mr-1" />
-                        <span>{appointment.clientName}</span>
-                      </div>
-                      <div className="mt-2">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          appointment.confirmed
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {appointment.confirmed ? 'Confirmada' : 'Pendiente'}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <button
-                      onClick={() => handleDelete(appointment)}
-                      className="text-red-600 hover:text-red-800 transition-colors"
-                      title="Cancelar cita"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="bg-white p-4 rounded shadow">
+      <h2 className="text-xl font-semibold mb-4">Todas las citas agendadas</h2>
+      {sortedAppointments.length === 0 ? (
+        <div className="text-gray-500">No hay citas agendadas.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full border border-gray-200">
+            <thead>
+              <tr>
+                <th className="px-4 py-2 border">Nombre</th>
+                <th className="px-4 py-2 border">Teléfono</th>
+                <th className="px-4 py-2 border">Fecha</th>
+                <th className="px-4 py-2 border">Hora</th>
+                <th className="px-4 py-2 border">Servicio</th>
+                <th className="px-4 py-2 border">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedAppointments.map((appointment) => (
+                <tr key={appointment.id}>
+                  <td className="px-4 py-2 border">{appointment.clientName}</td>
+                  <td className="px-4 py-2 border">{appointment.clientPhone}</td>
+                  <td className="px-4 py-2 border">
+                    {format(new Date(appointment.date), "EEEE, d 'de' MMMM yyyy", { locale: es })}
+                  </td>
+                  <td className="px-4 py-2 border">{appointment.time}</td>
+                  <td className="px-4 py-2 border">{appointment.service}</td>
+                  <td className="px-4 py-2 border">
+                    {appointment.confirmed ? (
+                      <span className="text-green-600 font-medium">Confirmada</span>
+                    ) : (
+                      <span className="text-yellow-700 font-medium">Pendiente</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

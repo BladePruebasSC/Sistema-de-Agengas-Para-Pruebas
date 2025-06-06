@@ -66,4 +66,14 @@ export interface TwilioResponse {
 export interface TwilioMessageData {
   clientPhone: string; // Formato esperado: "whatsapp:+1234567890"
   body: string;
+
+export interface Cita {
+  id: number;
+  nombre: string;
+  telefono: string;
+  fecha: string; // Formato ISO (ej: "2025-06-10")
+  hora: string;  // Ej: "14:00"
+  servicio: string;
+
+
 }

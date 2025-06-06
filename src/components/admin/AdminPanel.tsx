@@ -5,12 +5,13 @@ import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
 import HolidayForm from './HolidayForm';
 import BlockedTimeForm from './BlockedTimeForm';
+import AppointmentList from '../AppointmentList';
 import { Holiday, BlockedTime } from '../../types';
 
 const AdminPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'holidays' | 'blockedTimes'>('holidays');
+  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes'>('appointments');
   const { holidays, blockedTimes, removeHoliday, removeBlockedTime, createBlockedTime } = useAppointments();
-  
+
   const handleBlockTime = async (selectedDate: Date | null, selectedTime: string | null, reason: string) => {
     if (!selectedDate || !selectedTime) return;
 
@@ -29,33 +30,45 @@ const AdminPanel: React.FC = () => {
         <div className="flex border-b border-gray-200 mb-6">
           <button
             className={`py-2 px-4 font-medium text-sm ${
-              activeTab === 'holidays'
+              tab === 'appointments'
                 ? 'text-red-600 border-b-2 border-red-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
-            onClick={() => setActiveTab('holidays')}
+            onClick={() => setTab('appointments')}
+          >
+            Citas
+          </button>
+          <button
+            className={`py-2 px-4 font-medium text-sm ${
+              tab === 'holidays'
+                ? 'text-red-600 border-b-2 border-red-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('holidays')}
           >
             Gestión de Feriados
           </button>
           <button
             className={`py-2 px-4 font-medium text-sm ${
-              activeTab === 'blockedTimes'
+              tab === 'blockedTimes'
                 ? 'text-red-600 border-b-2 border-red-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
-            onClick={() => setActiveTab('blockedTimes')}
+            onClick={() => setTab('blockedTimes')}
           >
             Horas Bloqueadas
           </button>
         </div>
         
-        {activeTab === 'holidays' ? (
+        {tab === 'appointments' && (
+          <AppointmentList />
+        )}
+
+        {tab === 'holidays' && (
           <div>
             <HolidayForm />
-            
             <div className="mt-8">
               <h3 className="text-lg font-medium mb-4">Feriados Programados</h3>
-              
               {holidays.length === 0 ? (
                 <p className="text-gray-500">No hay feriados programados.</p>
               ) : (
@@ -71,13 +84,13 @@ const AdminPanel: React.FC = () => {
               )}
             </div>
           </div>
-        ) : (
+        )}
+
+        {tab === 'blockedTimes' && (
           <div>
             <BlockedTimeForm onBlockTime={handleBlockTime} />
-            
             <div className="mt-8">
               <h3 className="text-lg font-medium mb-4">Horarios Bloqueados</h3>
-              
               {blockedTimes.length === 0 ? (
                 <p className="text-gray-500">No hay horarios bloqueados.</p>
               ) : (
