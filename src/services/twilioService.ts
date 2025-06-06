@@ -1,30 +1,33 @@
 import { TwilioMessageData } from '../types';
 
 const TWILIO_API_URL = 'https://api.twilio.com/2010-04-01/Accounts';
+const ADMIN_PHONE = '+18092033894';
 
-// Helper to check if number is from Dominican Republic
+// Helper to check if number is from Dominican Republic (accepts with or without 1 country code)
 const isDRNumber = (phone: string): boolean => {
   const drAreaCodes = ['809', '829', '849'];
   const cleanPhone = phone.replace(/\D/g, '');
-  return drAreaCodes.some(code => cleanPhone.startsWith(code));
+  // Si el número tiene 11 dígitos y empieza con '1', quita el primer dígito
+  const phoneToCheck =
+    cleanPhone.length === 11 && cleanPhone.startsWith('1')
+      ? cleanPhone.slice(1)
+      : cleanPhone;
+  return drAreaCodes.some(code => phoneToCheck.startsWith(code));
 };
 
 const formatPhoneNumber = (phone: string): string => {
   if (!phone) {
     throw new Error('Número de teléfono no proporcionado');
   }
-
-  // Remove all non-digit characters
   let cleanPhone = phone.replace(/\D/g, '');
-  
-  // Remove any leading zeros
   cleanPhone = cleanPhone.replace(/^0+/, '');
-
-  // Add country code for DR numbers
+  // Si ya tiene el país, no lo agregues de nuevo
+  if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
+    return '+' + cleanPhone;
+  }
   if (isDRNumber(cleanPhone)) {
     return '+1' + cleanPhone;
   }
-  
   throw new Error('Número inválido: Debe ser un número válido de República Dominicana (809, 829, o 849)');
 };
 
@@ -44,7 +47,6 @@ export const sendSMSMessage = async (data: TwilioMessageData) => {
       return null;
     }
 
-    // Check if number is from DR
     if (!isDRNumber(data.clientPhone)) {
       console.log('Not a DR number, skipping SMS...');
       return null;
@@ -69,15 +71,26 @@ export const sendSMSMessage = async (data: TwilioMessageData) => {
     const responseData = await response.json();
 
     if (!response.ok) {
-      // Don't throw error, just log it
       console.warn('SMS sending failed:', responseData);
       return null;
     }
 
     return responseData;
   } catch (error) {
-    // Don't throw error, just log it
     console.warn('Error sending SMS:', error);
     return null;
   }
+};
+
+// Envía al cliente y al admin (si no es el mismo número)
+export const sendSMSBoth = async (data: TwilioMessageData) => {
+  const results = [];
+  // Envía al cliente
+  results.push(await sendSMSMessage(data));
+  // Si el cliente no es el admin, envía también al admin
+  const formattedClient = formatPhoneNumber(data.clientPhone);
+  if (formattedClient !== ADMIN_PHONE) {
+    results.push(await sendSMSMessage({ ...data, clientPhone: ADMIN_PHONE }));
+  }
+  return results;
 };

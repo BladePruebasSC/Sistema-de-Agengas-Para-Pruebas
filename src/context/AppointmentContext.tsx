@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { sendSMSMessage } from '../services/twilioService';
+import { sendSMSBoth } from '../services/twilioService'; // <-- CAMBIO AQUÍ
 import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
 import { format, isSameDay } from 'date-fns';
 
@@ -22,7 +22,7 @@ interface AppointmentContextType {
   getDayAvailability: (date: Date, allHours: string[]) => Promise<{ [hour: string]: boolean }>;
 }
 
-const ADMIN_PHONE = "18092033894";
+// Ya NO necesitas declarar ADMIN_PHONE ni el helper sendSMSBoth aquí.
 
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
@@ -44,19 +44,6 @@ const fetchWithRetry = async (operation: () => Promise<any>, maxRetries = 3, del
     }
   }
 };
-
-// Helper para enviar el SMS al cliente y al fijo
-async function sendSMSBoth({ clientPhone, body }: { clientPhone: string, body: string }) {
-  try {
-    await sendSMSMessage({ clientPhone, body });
-  } catch {}
-  // Si el número de cliente es distinto al fijo, lo mandamos también al fijo
-  if (clientPhone !== ADMIN_PHONE) {
-    try {
-      await sendSMSMessage({ clientPhone: ADMIN_PHONE, body });
-    } catch {}
-  }
-}
 
 export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
