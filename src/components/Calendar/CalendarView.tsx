@@ -8,7 +8,7 @@ import './Calendar.css';
 
 // Horarios actualizados según los nuevos requerimientos
 const ALL_HOURS = [
-  '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 AM',
+  '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
   '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'
 ];
 
@@ -22,7 +22,7 @@ const getHoursForDay = (date: Date): string[] => {
   } else if (dayOfWeek === 3) {
     // Miércoles: 7:00 AM a 12:00 PM y 3:00 PM a 7:00 PM
     return [
-      '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 AM',
+      '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
       '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
     ];
   } else {
