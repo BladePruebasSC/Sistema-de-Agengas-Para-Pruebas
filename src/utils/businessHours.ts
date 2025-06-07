@@ -12,7 +12,7 @@ export const businessHours: BusinessHours = {
   },
   wednesday: {
     morning: { start: '07:00', end: '12:00' },
-    afternoon: { start: '15:00', end: '19:00' } // Cierra a las 7 PM los miércoles
+    afternoon: { start: '15:00', end: '19:00' }
   },
   thursday: {
     morning: { start: '07:00', end: '12:00' },
@@ -27,7 +27,7 @@ export const businessHours: BusinessHours = {
     afternoon: { start: '15:00', end: '21:00' }
   },
   sunday: {
-    morning: { start: '10:00', end: '15:00' } // Domingos: 10 AM a 3 PM
+    morning: { start: '10:00', end: '15:00' } 
   }
 };
 
