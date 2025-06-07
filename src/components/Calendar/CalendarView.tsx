@@ -6,10 +6,30 @@ import { useAppointments } from '../../context/AppointmentContext';
 import TimeSlotPicker from './TimeSlotPicker';
 import './Calendar.css';
 
+// Horarios actualizados según los nuevos requerimientos
 const ALL_HOURS = [
   '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
   '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'
 ];
+
+// Horarios específicos por día
+const getHoursForDay = (date: Date): string[] => {
+  const dayOfWeek = date.getDay();
+  
+  if (dayOfWeek === 0) {
+    // Domingo: 10:00 AM a 3:00 PM
+    return ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM'];
+  } else if (dayOfWeek === 3) {
+    // Miércoles: 7:00 AM a 12:00 PM y 3:00 PM a 7:00 PM
+    return [
+      '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+      '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
+    ];
+  } else {
+    // Resto de días: horarios normales
+    return ALL_HOURS;
+  }
+};
 
 function parseHourLabel(hourLabel: string): { hour: number; minute: number; isPm: boolean } {
   // e.g. "7:00 AM", "3:00 PM"
@@ -45,9 +65,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   // --- FILTRADO RÁPIDO Y BLOQUEO DE HORAS PASADAS ---
   const getFilteredHours = (date: Date) => {
-    if (!isToday(date)) return ALL_HOURS;
+    const hoursForDay = getHoursForDay(date);
+    
+    if (!isToday(date)) return hoursForDay;
+    
     const now = new Date();
-    return ALL_HOURS.filter(label => {
+    return hoursForDay.filter(label => {
       const { hour, minute } = parseHourLabel(label);
       // Si la hora es mayor a la hora actual, mostrarla
       return hour > now.getHours() || (hour === now.getHours() && minute > now.getMinutes());
@@ -70,7 +93,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  // Solo dependencias necesarias, no ALL_HOURS ni getFilteredHours
   }, [isTimeSlotAvailable]);
 
   useEffect(() => {
@@ -115,6 +137,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     onTimeChange(time);
   };
 
+  const getBusinessHoursText = (date: Date) => {
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 0) {
+      return "Horario: 10:00 AM - 3:00 PM";
+    } else if (dayOfWeek === 3) {
+      return "Horario: 7:00 AM - 12:00 PM, 3:00 PM - 7:00 PM";
+    } else {
+      return "Horario: 7:00 AM - 12:00 PM, 3:00 PM - 9:00 PM";
+    }
+  };
+
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="p-6">
@@ -143,9 +176,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
           {selectedDate && (
             <div>
-              <h3 className="text-lg font-medium mb-3">
+              <h3 className="text-lg font-medium mb-2">
                 2. Elige un Horario - {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
               </h3>
+              <p className="text-sm text-gray-600 mb-3">
+                {getBusinessHoursText(selectedDate)}
+              </p>
               {isLoading ? (
                 <div className="flex items-center gap-2 mt-2">
                   <span className="inline-block w-5 h-5 border-2 border-t-2 border-gray-300 border-t-red-500 rounded-full animate-spin"></span>

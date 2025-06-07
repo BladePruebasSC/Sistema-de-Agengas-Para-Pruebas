@@ -51,8 +51,6 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
     return true;
   };
   
-  const allTimeSlots = generateTimeSlots(date);
-  
   if (isHoliday) {
     return (
       <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
@@ -62,7 +60,7 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
     );
   }
   
-  if (allTimeSlots.length === 0) {
+  if (availableHours.length === 0) {
     return (
       <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
         <p className="text-gray-600 font-medium">No hay horarios disponibles para este día.</p>
@@ -70,10 +68,29 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
     );
   }
   
-  const allHours = [
-    '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
-    '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'
-  ];
+  // Horarios específicos por día de la semana
+  const getHoursForDay = (date: Date): string[] => {
+    const dayOfWeek = date.getDay();
+    
+    if (dayOfWeek === 0) {
+      // Domingo: 10:00 AM a 3:00 PM
+      return ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM'];
+    } else if (dayOfWeek === 3) {
+      // Miércoles: 7:00 AM a 12:00 PM y 3:00 PM a 7:00 PM
+      return [
+        '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+        '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
+      ];
+    } else {
+      // Resto de días: horarios normales
+      return [
+        '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
+        '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'
+      ];
+    }
+  };
+
+  const allHours = getHoursForDay(date);
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">

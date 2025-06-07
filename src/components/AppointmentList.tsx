@@ -1,13 +1,20 @@
 import React from "react";
 import { useAppointments } from "../context/AppointmentContext";
-import { format } from "date-fns";
+import { format, isAfter, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 
 const AppointmentList: React.FC = () => {
   const { appointments } = useAppointments();
 
+  // Filtrar solo las citas futuras (de hoy en adelante)
+  const today = startOfDay(new Date());
+  const futureAppointments = appointments.filter(appointment => 
+    isAfter(appointment.date, today) || 
+    format(appointment.date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')
+  );
+
   // Ordenar por fecha y hora
-  const sortedAppointments = [...appointments].sort((a, b) => {
+  const sortedAppointments = [...futureAppointments].sort((a, b) => {
     const dateA = new Date(a.date);
     const dateB = new Date(b.date);
     if (dateA.getTime() !== dateB.getTime()) {
@@ -18,9 +25,9 @@ const AppointmentList: React.FC = () => {
 
   return (
     <div className="bg-white p-4 rounded shadow">
-      <h2 className="text-xl font-semibold mb-4">Todas las citas agendadas</h2>
+      <h2 className="text-xl font-semibold mb-4">Citas programadas</h2>
       {sortedAppointments.length === 0 ? (
-        <div className="text-gray-500">No hay citas agendadas.</div>
+        <div className="text-gray-500">No hay citas programadas.</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full border border-gray-200">
@@ -55,6 +62,11 @@ const AppointmentList: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {appointments.length > sortedAppointments.length && (
+        <div className="mt-4 text-sm text-gray-500">
+          Las citas pasadas se eliminan automáticamente del sistema.
         </div>
       )}
     </div>

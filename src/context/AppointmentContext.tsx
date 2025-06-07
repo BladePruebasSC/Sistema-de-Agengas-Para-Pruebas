@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { sendSMSBoth } from '../services/twilioService';
 import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
-import { format, isSameDay } from 'date-fns';
+import { format, isSameDay, startOfDay, isBefore } from 'date-fns';
 
 interface AppointmentContextType {
   appointments: Appointment[];
@@ -22,6 +22,7 @@ interface AppointmentContextType {
   getDayAvailability: (date: Date) => Promise<{ [hour: string]: boolean }>;
   getAvailableHoursForDate: (date: Date) => string[];
   formatHour12h: (hour24: string) => string;
+  cleanupPastAppointments: () => Promise<void>;
 }
 
 // Genera un rango de horas en formato HH:00
@@ -33,23 +34,23 @@ const generateHoursRange = (start: number, end: number) => {
   return hours;
 };
 
-// HORARIOS:
+// HORARIOS ACTUALIZADOS:
 // Domingo: 10:00 a 15:00
-// Miércoles: 7:00 a 12:00 y 15:00 a 19:00
+// Miércoles: 7:00 a 12:00 y 15:00 a 19:00 (cierra a las 7 PM)
 // Resto: 7:00 a 12:00 y 15:00 a 21:00
 const getAvailableHoursForDate = (date: Date): string[] => {
   const weekday = date.getDay();
   if (weekday === 0) {
-    // Domingo
+    // Domingo: 10:00 AM a 3:00 PM
     return generateHoursRange(10, 15);
   } else if (weekday === 3) {
-    // Miércoles
+    // Miércoles: 7:00 AM a 12:00 PM y 3:00 PM a 7:00 PM
     return [
       ...generateHoursRange(7, 12),
       ...generateHoursRange(15, 19)
     ];
   } else {
-    // Lunes, martes, jueves, viernes, sábado
+    // Lunes, martes, jueves, viernes, sábado: 7:00 AM a 12:00 PM y 3:00 PM a 9:00 PM
     return [
       ...generateHoursRange(7, 12),
       ...generateHoursRange(15, 21)
@@ -83,6 +84,34 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [userPhone, setUserPhone] = useState<string | null>(() => localStorage.getItem('userPhone'));
+
+  // Función para limpiar citas pasadas
+  const cleanupPastAppointments = async () => {
+    try {
+      const today = startOfDay(new Date());
+      const todayFormatted = formatDateForSupabase(today);
+      
+      // Eliminar citas anteriores a hoy
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .lt('date', todayFormatted);
+      
+      if (error) {
+        console.error('Error cleaning up past appointments:', error);
+        return;
+      }
+      
+      // Actualizar el estado local
+      setAppointments(prev => 
+        prev.filter(appointment => !isBefore(appointment.date, today))
+      );
+      
+      console.log('Past appointments cleaned up successfully');
+    } catch (error) {
+      console.error('Error in cleanupPastAppointments:', error);
+    }
+  };
 
   const fetchAppointments = async () => {
     try {
@@ -136,9 +165,18 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   useEffect(() => {
-    fetchAppointments();
-    fetchHolidays();
-    fetchBlockedTimes();
+    const initializeData = async () => {
+      // Primero limpiar citas pasadas
+      await cleanupPastAppointments();
+      // Luego cargar todos los datos
+      await Promise.all([
+        fetchAppointments(),
+        fetchHolidays(),
+        fetchBlockedTimes()
+      ]);
+    };
+    
+    initializeData();
   }, []);
 
   const isTimeSlotAvailable = useCallback(async (date: Date, time: string): Promise<boolean> => {
@@ -382,6 +420,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     getDayAvailability,
     getAvailableHoursForDate,
     formatHour12h,
+    cleanupPastAppointments,
   };
 
   return (
