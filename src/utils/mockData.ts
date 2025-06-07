@@ -6,6 +6,7 @@ export const services: Service[] = [
   { id: '2', name: 'Adulto con Barba', price: 1500, duration: 45 },
   { id: '3', name: 'Joven', price: 800, duration: 45 },
   { id: '4', name: 'Cerquillo', price: 500, duration: 45 },
+  { id: '5', name: 'Con Tijeras', price: 2000, duration: 45 },
 ];
 
 // Initial mock appointments
