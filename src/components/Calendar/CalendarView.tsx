@@ -43,6 +43,19 @@ function parseHourLabel(hourLabel: string): { hour: number; minute: number; isPm
   return { hour, minute, isPm };
 }
 
+function isEarlyHourRestricted(date: Date, hourLabel: string, now: Date) {
+  // Aplica solo para 7:00 AM y 8:00 AM de cualquier día
+  if (hourLabel !== '7:00 AM' && hourLabel !== '8:00 AM') return false;
+
+  const target = new Date(date);
+  const { hour, minute } = parseHourLabel(hourLabel);
+  target.setHours(hour, minute, 0, 0);
+
+  const diffMs = target.getTime() - now.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return diffHours < 12;
+}
+
 interface CalendarViewProps {
   onDateTimeSelected: (date: Date, time: string) => void;
   selectedDate: Date | null;
@@ -63,17 +76,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const today = startOfDay(new Date());
 
-  // --- FILTRADO RÁPIDO Y BLOQUEO DE HORAS PASADAS ---
+  // --- FILTRADO RÁPIDO Y BLOQUEO DE HORAS PASADAS Y RESTRICCIÓN DE 12 HORAS ---
   const getFilteredHours = (date: Date) => {
     const hoursForDay = getHoursForDay(date);
-    
-    if (!isToday(date)) return hoursForDay;
-    
     const now = new Date();
+
     return hoursForDay.filter(label => {
-      const { hour, minute } = parseHourLabel(label);
-      // Si la hora es mayor a la hora actual, mostrarla
-      return hour > now.getHours() || (hour === now.getHours() && minute > now.getMinutes());
+      // Restricción para las primeras dos horas (12h de antelación)
+      if (isEarlyHourRestricted(date, label, now)) {
+        return false;
+      }
+      // Si es el mismo día, filtrar horas pasadas
+      if (isToday(date)) {
+        const { hour, minute } = parseHourLabel(label);
+        return hour > now.getHours() || (hour === now.getHours() && minute > now.getMinutes());
+      }
+      return true;
     });
   };
 
