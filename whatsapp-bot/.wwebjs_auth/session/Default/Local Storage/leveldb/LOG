@@ -1,0 +1,11 @@
+2025/06/03-09:41:50.213 18b8 Creating DB C:\Users\HP\Downloads\project-bolt-github-fs5rexkh\Agenda_Citas_Gaston\whatsapp-bot\.wwebjs_auth\session\Default\Local Storage\leveldb since it was missing.
+2025/06/03-09:41:50.237 18b8 Reusing MANIFEST C:\Users\HP\Downloads\project-bolt-github-fs5rexkh\Agenda_Citas_Gaston\whatsapp-bot\.wwebjs_auth\session\Default\Local Storage\leveldb/MANIFEST-000001
+2025/06/03-11:11:13.400 3cf4 Level-0 table #5: started
+2025/06/03-11:11:13.406 3cf4 Level-0 table #5: 21283 bytes OK
+2025/06/03-11:11:13.410 3cf4 Delete type=0 #3
+2025/06/03-13:59:09.444 111c Level-0 table #7: started
+2025/06/03-13:59:09.450 111c Level-0 table #7: 17995 bytes OK
+2025/06/03-13:59:09.453 111c Delete type=0 #4
+2025/06/03-17:03:59.212 27d4 Level-0 table #9: started
+2025/06/03-17:03:59.232 27d4 Level-0 table #9: 16824 bytes OK
+2025/06/03-17:03:59.236 27d4 Delete type=0 #6
