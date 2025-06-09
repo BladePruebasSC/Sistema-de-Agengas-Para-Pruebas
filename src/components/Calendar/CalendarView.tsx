@@ -43,17 +43,21 @@ function parseHourLabel(hourLabel: string): { hour: number; minute: number; isPm
   return { hour, minute, isPm };
 }
 
-function isEarlyHourRestricted(date: Date, hourLabel: string, now: Date) {
+function isEarlyHourRestricted(date: Date, hourLabel: string, adminSettings: any) {
   // Aplica solo para 7:00 AM y 8:00 AM de cualquier día
   if (hourLabel !== '7:00 AM' && hourLabel !== '8:00 AM') return false;
+  
+  // Si la restricción no está activada, no aplicar
+  if (!adminSettings.early_booking_restriction) return false;
 
   const target = new Date(date);
   const { hour, minute } = parseHourLabel(hourLabel);
   target.setHours(hour, minute, 0, 0);
 
+  const now = new Date();
   const diffMs = target.getTime() - now.getTime();
   const diffHours = diffMs / (1000 * 60 * 60);
-  return diffHours < 12;
+  return diffHours < adminSettings.early_booking_hours;
 }
 
 interface CalendarViewProps {
@@ -71,19 +75,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   onDateChange,
   onTimeChange 
 }) => {
-  const { isTimeSlotAvailable, holidays } = useAppointments();
+  const { isTimeSlotAvailable, holidays, adminSettings } = useAppointments();
   const [availableHours, setAvailableHours] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const today = startOfDay(new Date());
 
-  // --- FILTRADO RÁPIDO Y BLOQUEO DE HORAS PASADAS Y RESTRICCIÓN DE 12 HORAS ---
+  // --- FILTRADO RÁPIDO Y BLOQUEO DE HORAS PASADAS Y RESTRICCIÓN DE HORAS TEMPRANAS ---
   const getFilteredHours = (date: Date) => {
     const hoursForDay = getHoursForDay(date);
     const now = new Date();
 
     return hoursForDay.filter(label => {
-      // Restricción para las primeras dos horas (12h de antelación)
-      if (isEarlyHourRestricted(date, label, now)) {
+      // Restricción para las primeras dos horas (configuración de admin)
+      if (isEarlyHourRestricted(date, label, adminSettings)) {
         return false;
       }
       // Si es el mismo día, filtrar horas pasadas
@@ -111,7 +115,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [isTimeSlotAvailable]);
+  }, [isTimeSlotAvailable, adminSettings]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -166,6 +170,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
   };
 
+  const getRestrictionsText = () => {
+    if (adminSettings.early_booking_restriction) {
+      return `Nota: Los horarios de 7:00 AM y 8:00 AM requieren reserva con ${adminSettings.early_booking_hours} horas de antelación.`;
+    }
+    return null;
+  };
+
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="p-6">
@@ -197,9 +208,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               <h3 className="text-lg font-medium mb-2">
                 2. Elige un Horario - {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
               </h3>
-              <p className="text-sm text-gray-600 mb-3">
+              <p className="text-sm text-gray-600 mb-2">
                 {getBusinessHoursText(selectedDate)}
               </p>
+              {getRestrictionsText() && (
+                <p className="text-sm text-orange-600 mb-3 bg-orange-50 p-2 rounded">
+                  {getRestrictionsText()}
+                </p>
+              )}
               {isLoading ? (
                 <div className="flex items-center gap-2 mt-2">
                   <span className="inline-block w-5 h-5 border-2 border-t-2 border-gray-300 border-t-red-500 rounded-full animate-spin"></span>

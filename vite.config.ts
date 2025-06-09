@@ -10,9 +10,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/whatsapp': {
-        target: `${process.env.VITE_SUPABASE_URL}/functions/v1/whatsapp`,
+        target: `${process.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-api`,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path.replace(/^\/api\/whatsapp/, ''),
         headers: {
           'Authorization': `Bearer ${process.env.VITE_SUPABASE_ANON_KEY}`,
           'Content-Type': 'application/json',

@@ -3,13 +3,20 @@ import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { sendSMSBoth } from '../services/twilioService';
+import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../services/whatsappService';
 import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
 import { format, isSameDay, startOfDay, isBefore } from 'date-fns';
+
+interface AdminSettings {
+  early_booking_restriction: boolean;
+  early_booking_hours: number;
+}
 
 interface AppointmentContextType {
   appointments: Appointment[];
   holidays: Holiday[];
   blockedTimes: BlockedTime[];
+  adminSettings: AdminSettings;
   userPhone: string | null;
   setUserPhone: (phone: string) => void;
   deleteAppointment: (id: string) => Promise<void>;
@@ -23,6 +30,7 @@ interface AppointmentContextType {
   getAvailableHoursForDate: (date: Date) => string[];
   formatHour12h: (hour24: string) => string;
   cleanupPastAppointments: () => Promise<void>;
+  loadAdminSettings: () => Promise<void>;
 }
 
 // Genera un rango de horas en formato HH:00
@@ -69,6 +77,26 @@ const formatHour12h = (hour24: string): string => {
   return `${hour}:${minute} ${ampm}`;
 };
 
+// Función para verificar restricción de horarios tempranos
+const isEarlyHourRestricted = (date: Date, time: string, adminSettings: AdminSettings): boolean => {
+  if (!adminSettings.early_booking_restriction) return false;
+  
+  // Solo aplica para 7:00 AM y 8:00 AM
+  if (time !== '7:00 AM' && time !== '8:00 AM') return false;
+  
+  const now = new Date();
+  const appointmentDateTime = new Date(date);
+  
+  // Convertir tiempo a 24h para comparación
+  const hour = time === '7:00 AM' ? 7 : 8;
+  appointmentDateTime.setHours(hour, 0, 0, 0);
+  
+  const diffMs = appointmentDateTime.getTime() - now.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  
+  return diffHours < adminSettings.early_booking_hours;
+};
+
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
 export const useAppointments = () => {
@@ -83,7 +111,34 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
+  const [adminSettings, setAdminSettings] = useState<AdminSettings>({
+    early_booking_restriction: false,
+    early_booking_hours: 12
+  });
   const [userPhone, setUserPhone] = useState<string | null>(() => localStorage.getItem('userPhone'));
+
+  // Función para cargar configuración de admin
+  const loadAdminSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('admin_settings')
+        .select('*')
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (data) {
+        setAdminSettings({
+          early_booking_restriction: data.early_booking_restriction,
+          early_booking_hours: data.early_booking_hours
+        });
+      }
+    } catch (error) {
+      console.error('Error loading admin settings:', error);
+    }
+  };
 
   // Función para limpiar citas pasadas
   const cleanupPastAppointments = async () => {
@@ -166,9 +221,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   useEffect(() => {
     const initializeData = async () => {
-      // Primero limpiar citas pasadas
+      // Primero cargar configuración de admin
+      await loadAdminSettings();
+      // Luego limpiar citas pasadas
       await cleanupPastAppointments();
-      // Luego cargar todos los datos
+      // Finalmente cargar todos los datos
       await Promise.all([
         fetchAppointments(),
         fetchHolidays(),
@@ -181,6 +238,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const isTimeSlotAvailable = useCallback(async (date: Date, time: string): Promise<boolean> => {
     try {
+      // Verificar restricción de horarios tempranos
+      if (isEarlyHourRestricted(date, time, adminSettings)) {
+        return false;
+      }
+
       const formattedDate = formatDateForSupabase(date);
       const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([
         supabase.from('holidays').select('id').eq('date', formattedDate),
@@ -197,7 +259,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     } catch (err) {
       return false;
     }
-  }, []);
+  }, [adminSettings]);
 
   const getDayAvailability = useCallback(async (date: Date) => {
     const formattedDate = formatDateForSupabase(date);
@@ -234,13 +296,19 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
 
     for (const hour of hours) {
-      availability[hour] = !(blockedSlots.has(hour) || takenSlots.has(hour));
+      const isRestricted = isEarlyHourRestricted(date, hour, adminSettings);
+      availability[hour] = !(blockedSlots.has(hour) || takenSlots.has(hour) || isRestricted);
     }
     return availability;
-  }, []);
+  }, [adminSettings]);
 
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
     try {
+      // Verificar restricción de horarios tempranos antes de crear
+      if (isEarlyHourRestricted(appointmentData.date, appointmentData.time, adminSettings)) {
+        throw new Error(`Este horario requiere reserva con ${adminSettings.early_booking_hours} horas de antelación`);
+      }
+
       const formattedDate = formatDateForSupabase(appointmentData.date);
       const { data: newAppointment, error } = await supabase
         .from('appointments')
@@ -248,13 +316,32 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         .select()
         .single();
       if (error) throw new Error('Error al crear la cita en la base de datos');
+      
       try {
+        // Enviar notificaciones por WhatsApp
+        await notifyAppointmentCreated({
+          clientPhone: appointmentData.clientPhone,
+          clientName: appointmentData.clientName,
+          date: format(appointmentData.date, 'dd/MM/yyyy'),
+          time: appointmentData.time,
+          service: appointmentData.service
+        });
+      } catch (whatsappError) {
+        console.error('Error enviando WhatsApp:', whatsappError);
+        // No fallar la creación de cita si WhatsApp falla
+      }
+
+      try {
+        // Mantener SMS como respaldo
         await sendSMSBoth({
           clientPhone: appointmentData.clientPhone,
           body: `Gaston Stylo: Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`,
           adminBody: `Nueva cita creada por ${appointmentData.clientName || 'Cliente'} para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
         });
-      } catch {}
+      } catch (smsError) {
+        console.error('Error enviando SMS:', smsError);
+      }
+
       const parsedAppointment = {
         ...newAppointment,
         date: parseSupabaseDate(newAppointment.date)
@@ -265,6 +352,44 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al crear la cita');
       throw error;
+    }
+  };
+
+  const deleteAppointment = async (id: string): Promise<void> => {
+    try {
+      const appointmentToDelete = appointments.find(app => app.id === id);
+      if (!appointmentToDelete) return;
+      
+      const { error } = await supabase.from('appointments').delete().eq('id', id);
+      if (error) throw error;
+      
+      setAppointments(prev => prev.filter(app => app.id !== id));
+      
+      try {
+        // Enviar notificaciones de cancelación por WhatsApp
+        await notifyAppointmentCancelled({
+          clientPhone: appointmentToDelete.clientPhone,
+          clientName: appointmentToDelete.clientName,
+          date: format(appointmentToDelete.date, 'dd/MM/yyyy'),
+          time: appointmentToDelete.time,
+          service: appointmentToDelete.service
+        });
+      } catch (whatsappError) {
+        console.error('Error enviando WhatsApp de cancelación:', whatsappError);
+      }
+
+      try {
+        // Mantener SMS como respaldo
+        await sendSMSBoth({
+          clientPhone: appointmentToDelete.clientPhone,
+          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`,
+          adminBody: `Cita cancelada por ${appointmentToDelete.clientName || 'Cliente'} para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time}.`
+        });
+      } catch (smsError) {
+        console.error('Error enviando SMS de cancelación:', smsError);
+      }
+    } catch (error) {
+      console.error('Error deleting appointment:', error);
     }
   };
 
@@ -387,27 +512,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     localStorage.setItem('userPhone', phone);
   };
 
-  const deleteAppointment = async (id: string): Promise<void> => {
-    try {
-      const appointmentToDelete = appointments.find(app => app.id === id);
-      if (!appointmentToDelete) return;
-      const { error } = await supabase.from('appointments').delete().eq('id', id);
-      if (error) throw error;
-      setAppointments(prev => prev.filter(app => app.id !== id));
-      try {
-        await sendSMSBoth({
-          clientPhone: appointmentToDelete.clientPhone,
-          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`,
-          adminBody: `Cita cancelada por ${appointmentToDelete.clientName || 'Cliente'} para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time}.`
-        });
-      } catch {}
-    } catch (error) {}
-  };
-
   const value = {
     appointments,
     holidays,
     blockedTimes,
+    adminSettings,
     userPhone,
     setUserPhone: handleSetUserPhone,
     deleteAppointment,
@@ -421,6 +530,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     getAvailableHoursForDate,
     formatHour12h,
     cleanupPastAppointments,
+    loadAdminSettings,
   };
 
   return (

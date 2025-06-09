@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, XCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, XCircle, Settings as SettingsIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
 import HolidayForm from './HolidayForm';
 import BlockedTimeForm from './BlockedTimeForm';
+import AdminSettings from './AdminSettings';
 import AppointmentList from '../AppointmentList';
 import { Holiday, BlockedTime } from '../../types';
 
 const AdminPanel: React.FC = () => {
-  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes'>('appointments');
+  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes' | 'settings'>('appointments');
   const { holidays, blockedTimes, removeHoliday, removeBlockedTime, createBlockedTime } = useAppointments();
 
   const handleBlockTime = async (selectedDate: Date | null, selectedTime: string | null, reason: string) => {
@@ -57,6 +58,16 @@ const AdminPanel: React.FC = () => {
             onClick={() => setTab('blockedTimes')}
           >
             Horas Bloqueadas
+          </button>
+          <button
+            className={`py-2 px-4 font-medium text-sm ${
+              tab === 'settings'
+                ? 'text-red-600 border-b-2 border-red-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('settings')}
+          >
+            Configuración
           </button>
         </div>
         
@@ -106,6 +117,10 @@ const AdminPanel: React.FC = () => {
               )}
             </div>
           </div>
+        )}
+
+        {tab === 'settings' && (
+          <AdminSettings />
         )}
       </div>
     </div>
