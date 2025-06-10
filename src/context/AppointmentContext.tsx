@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { sendSMSBoth } from '../services/twilioService';
 import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../services/whatsappService';
 import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
 import { format, isSameDay, startOfDay, isBefore } from 'date-fns';
