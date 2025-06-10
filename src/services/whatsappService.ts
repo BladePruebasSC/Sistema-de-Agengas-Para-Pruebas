@@ -8,28 +8,19 @@ interface WhatsAppMessageData {
 
 const ADMIN_PHONE = '+18092033894';
 
-export const sendWhatsAppMessage = async (to: string, message: string) => {
-  try {
-    const response = await fetch('/api/whatsapp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to,
-        message
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error('Error enviando mensaje de WhatsApp');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error en WhatsApp service:', error);
-    throw error;
-  }
+// Función para abrir WhatsApp Web con mensaje pre-escrito
+export const openWhatsAppWithMessage = (phone: string, message: string) => {
+  // Limpiar el número de teléfono
+  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // Codificar el mensaje para URL
+  const encodedMessage = encodeURIComponent(message);
+  
+  // Crear la URL de WhatsApp Web
+  const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+  
+  // Abrir en una nueva ventana/pestaña
+  window.open(whatsappUrl, '_blank');
 };
 
 export const notifyAppointmentCreated = async (data: WhatsAppMessageData) => {
@@ -52,15 +43,18 @@ Te esperamos en D' Gastón Stylo.
 ✂️ Servicio: ${data.service}`;
 
   try {
-    // Enviar mensaje al cliente
-    await sendWhatsAppMessage(data.clientPhone, clientMessage);
+    // Abrir WhatsApp para enviar mensaje al cliente
+    openWhatsAppWithMessage(data.clientPhone, clientMessage);
     
-    // Enviar mensaje al admin
-    await sendWhatsAppMessage(ADMIN_PHONE, adminMessage);
+    // Pequeña pausa para evitar que se abran las ventanas al mismo tiempo
+    setTimeout(() => {
+      // Abrir WhatsApp para enviar mensaje al admin
+      openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
+    }, 1000);
     
     return { success: true };
   } catch (error) {
-    console.error('Error enviando notificaciones WhatsApp:', error);
+    console.error('Error abriendo WhatsApp:', error);
     throw error;
   }
 };
@@ -87,15 +81,18 @@ Gracias por tu comprensión.`;
 El horario está ahora disponible.`;
 
   try {
-    // Enviar mensaje al cliente
-    await sendWhatsAppMessage(data.clientPhone, clientMessage);
+    // Abrir WhatsApp para enviar mensaje al cliente
+    openWhatsAppWithMessage(data.clientPhone, clientMessage);
     
-    // Enviar mensaje al admin
-    await sendWhatsAppMessage(ADMIN_PHONE, adminMessage);
+    // Pequeña pausa para evitar que se abran las ventanas al mismo tiempo
+    setTimeout(() => {
+      // Abrir WhatsApp para enviar mensaje al admin
+      openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
+    }, 1000);
     
     return { success: true };
   } catch (error) {
-    console.error('Error enviando notificaciones de cancelación:', error);
+    console.error('Error abriendo WhatsApp:', error);
     throw error;
   }
 };

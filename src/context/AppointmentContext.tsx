@@ -318,7 +318,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw new Error('Error al crear la cita en la base de datos');
       
       try {
-        // Enviar notificaciones por WhatsApp
+        // Enviar notificaciones por WhatsApp Web
         await notifyAppointmentCreated({
           clientPhone: appointmentData.clientPhone,
           clientName: appointmentData.clientName,
@@ -366,7 +366,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       setAppointments(prev => prev.filter(app => app.id !== id));
       
       try {
-        // Enviar notificaciones de cancelación por WhatsApp
+        // Enviar notificaciones de cancelación por WhatsApp Web
         await notifyAppointmentCancelled({
           clientPhone: appointmentToDelete.clientPhone,
           clientName: appointmentToDelete.clientName,
