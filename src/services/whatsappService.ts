@@ -24,33 +24,21 @@ export const openWhatsAppWithMessage = (phone: string, message: string) => {
 };
 
 export const notifyAppointmentCreated = async (data: WhatsAppMessageData) => {
-  const clientMessage = `¡Hola ${data.clientName}! 
+  const adminMessage = `🔔 *NUEVA CITA REGISTRADA* 🔔
 
-Tu cita ha sido confirmada:
-📅 Fecha: ${data.date}
-🕒 Hora: ${data.time}
-✂️ Servicio: ${data.service}
+✂️ *D' Gastón Stylo Barbería*
 
-Te esperamos en D' Gastón Stylo.
-¡Gracias por elegirnos!`;
+👤 *Cliente:* ${data.clientName}
+📱 *Teléfono:* ${data.clientPhone}
+📅 *Fecha:* ${data.date}
+🕒 *Hora:* ${data.time}
+💼 *Servicio:* ${data.service}
 
-  const adminMessage = `Nueva cita registrada:
-
-👤 Cliente: ${data.clientName}
-📱 Teléfono: ${data.clientPhone}
-📅 Fecha: ${data.date}
-🕒 Hora: ${data.time}
-✂️ Servicio: ${data.service}`;
+¡Nueva cita confirmada en el sistema!`;
 
   try {
-    // Abrir WhatsApp para enviar mensaje al cliente
-    openWhatsAppWithMessage(data.clientPhone, clientMessage);
-    
-    // Pequeña pausa para evitar que se abran las ventanas al mismo tiempo
-    setTimeout(() => {
-      // Abrir WhatsApp para enviar mensaje al admin
-      openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
-    }, 1000);
+    // Solo enviar mensaje al admin/dueño
+    openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
     
     return { success: true };
   } catch (error) {
@@ -60,35 +48,21 @@ Te esperamos en D' Gastón Stylo.
 };
 
 export const notifyAppointmentCancelled = async (data: WhatsAppMessageData) => {
-  const clientMessage = `Hola ${data.clientName},
+  const adminMessage = `❌ *CITA CANCELADA* ❌
 
-Tu cita ha sido cancelada:
-📅 Fecha: ${data.date}
-🕒 Hora: ${data.time}
+✂️ *D' Gastón Stylo Barbería*
 
-Si necesitas reagendar, puedes hacerlo en nuestra página web.
+👤 *Cliente:* ${data.clientName}
+📱 *Teléfono:* ${data.clientPhone}
+📅 *Fecha:* ${data.date}
+🕒 *Hora:* ${data.time}
+💼 *Servicio:* ${data.service}
 
-Gracias por tu comprensión.`;
-
-  const adminMessage = `Cita cancelada:
-
-👤 Cliente: ${data.clientName}
-📱 Teléfono: ${data.clientPhone}
-📅 Fecha: ${data.date}
-🕒 Hora: ${data.time}
-✂️ Servicio: ${data.service}
-
-El horario está ahora disponible.`;
+⚠️ *El horario está ahora disponible para nuevas citas.*`;
 
   try {
-    // Abrir WhatsApp para enviar mensaje al cliente
-    openWhatsAppWithMessage(data.clientPhone, clientMessage);
-    
-    // Pequeña pausa para evitar que se abran las ventanas al mismo tiempo
-    setTimeout(() => {
-      // Abrir WhatsApp para enviar mensaje al admin
-      openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
-    }, 1000);
+    // Solo enviar mensaje al admin/dueño
+    openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
     
     return { success: true };
   } catch (error) {

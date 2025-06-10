@@ -8,7 +8,7 @@ import { generateTimeSlots } from '../../utils/businessHours';
 import toast from 'react-hot-toast';
 
 interface BlockedTimeFormProps {
-  onBlockTime: (date: Date, selectedTimes: string[], reason: string) => Promise<void>;
+  onBlockTime?: (date: Date, selectedTimes: string[], reason: string) => Promise<void>;
 }
 
 const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
@@ -41,9 +41,9 @@ const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
 
     try {
       await createBlockedTime({
-        date: date, // Ahora sabemos que date no es null
-        timeSlots: selectedTimes.sort(), // Ordenamos los horarios
-        reason: reason.trim()
+        date: date,
+        timeSlots: selectedTimes.sort(),
+        reason: reason.trim() || 'Horario bloqueado'
       });
       
       toast.success('Horarios bloqueados exitosamente');
@@ -55,6 +55,7 @@ const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
       
     } catch (error) {
       console.error('Error in handleSubmit:', error);
+      toast.error('Error al bloquear horarios');
     }
   };
   
@@ -72,7 +73,7 @@ const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
             </label>
             <DatePicker
               selected={date}
-              onChange={(date: Date) => {
+              onChange={(date: Date | null) => {
                 setDate(date);
                 setSelectedTimes([]);
               }}
@@ -134,7 +135,8 @@ const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
         <div>
           <button
             type="submit"
-            className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md shadow"
+            disabled={!date || selectedTimes.length === 0}
+            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-md shadow transition-colors"
           >
             Bloquear Horarios Seleccionados
           </button>

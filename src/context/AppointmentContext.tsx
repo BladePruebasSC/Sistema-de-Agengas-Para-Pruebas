@@ -330,17 +330,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         // No fallar la creación de cita si WhatsApp falla
       }
 
-      try {
-        // Mantener SMS como respaldo
-        await sendSMSBoth({
-          clientPhone: appointmentData.clientPhone,
-          body: `Gaston Stylo: Tu cita ha sido confirmada para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`,
-          adminBody: `Nueva cita creada por ${appointmentData.clientName || 'Cliente'} para el ${format(appointmentData.date, 'dd/MM/yyyy')} a las ${appointmentData.time}.`
-        });
-      } catch (smsError) {
-        console.error('Error enviando SMS:', smsError);
-      }
-
       const parsedAppointment = {
         ...newAppointment,
         date: parseSupabaseDate(newAppointment.date)
@@ -377,16 +366,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         console.error('Error enviando WhatsApp de cancelación:', whatsappError);
       }
 
-      try {
-        // Mantener SMS como respaldo
-        await sendSMSBoth({
-          clientPhone: appointmentToDelete.clientPhone,
-          body: `Gaston Stylo: Tu cita para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time} ha sido cancelada.`,
-          adminBody: `Cita cancelada por ${appointmentToDelete.clientName || 'Cliente'} para el ${format(appointmentToDelete.date, 'dd/MM/yyyy')} a las ${appointmentToDelete.time}.`
-        });
-      } catch (smsError) {
-        console.error('Error enviando SMS de cancelación:', smsError);
-      }
     } catch (error) {
       console.error('Error deleting appointment:', error);
     }
@@ -409,16 +388,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw error;
       const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
       setHolidays(prev => [...prev, newHoliday]);
-      const appointmentsOnDate = appointments.filter(app => isSameDay(app.date, holidayData.date));
-      for (const appointment of appointmentsOnDate) {
-        try {
-          await sendSMSBoth({
-            clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Este dia no esta disponible para citas (${format(holidayData.date, 'dd/MM/yyyy')}).`,
-            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} tenía cita el día bloqueado (${format(holidayData.date, 'dd/MM/yyyy')}).`
-          });
-        } catch {}
-      }
       return newHoliday;
     } catch (error) {
       throw error;
@@ -432,16 +401,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const { error } = await supabase.from('holidays').delete().eq('id', id);
       if (error) throw error;
       setHolidays(prev => prev.filter(h => h.id !== id));
-      const appointmentsOnDate = appointments.filter(app => isSameDay(app.date, holidayToRemove.date));
-      for (const appointment of appointmentsOnDate) {
-        try {
-          await sendSMSBoth({
-            clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Este dia ahora se encuentra disponible para citas (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`,
-            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} puede volver a agendar el día liberado (${format(holidayToRemove.date, 'dd/MM/yyyy')}).`
-          });
-        } catch {}
-      }
     } catch (error) {
       throw error;
     }
@@ -451,10 +410,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     try {
       const formattedDate = formatDateForSupabase(blockedTimeData.date);
       const dataToInsert = {
-        ...blockedTimeData,
         date: formattedDate,
-        time: blockedTimeData.timeSlots,
-        timeSlots: blockedTimeData.timeSlots
+        time: Array.isArray(blockedTimeData.timeSlots) ? blockedTimeData.timeSlots[0] : blockedTimeData.timeSlots,
+        timeSlots: blockedTimeData.timeSlots,
+        reason: blockedTimeData.reason || 'Horario bloqueado'
       };
       const { data, error } = await supabase
         .from('blocked_times')
@@ -464,18 +423,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw error;
       const newBlockedTime = { ...data, date: parseSupabaseDate(data.date) };
       setBlockedTimes(prev => [...prev, newBlockedTime]);
-      const appointmentsAtTime = appointments.filter(app =>
-        isSameDay(app.date, blockedTimeData.date) && app.time === blockedTimeData.timeSlots
-      );
-      for (const appointment of appointmentsAtTime) {
-        try {
-          await sendSMSBoth({
-            clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Esta hora no esta disponible para citas (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`,
-            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} tenía cita en hora bloqueada (${format(blockedTimeData.date, 'dd/MM/yyyy')} ${blockedTimeData.timeSlots}).`
-          });
-        } catch {}
-      }
       return newBlockedTime;
     } catch (error) {
       throw error;
@@ -489,18 +436,6 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const { error } = await supabase.from('blocked_times').delete().eq('id', id);
       if (error) throw error;
       setBlockedTimes(prev => prev.filter(bt => bt.id !== id));
-      const appointmentsAtTime = appointments.filter(app =>
-        isSameDay(app.date, blockedTimeToRemove.date) && app.time === blockedTimeToRemove.timeSlots
-      );
-      for (const appointment of appointmentsAtTime) {
-        try {
-          await sendSMSBoth({
-            clientPhone: appointment.clientPhone,
-            body: `Gaston Stylo: Esta hora esta disponible para citas (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`,
-            adminBody: `Aviso: ${appointment.clientName || 'Cliente'} puede reservar la hora liberada (${format(blockedTimeToRemove.date, 'dd/MM/yyyy')} ${blockedTimeToRemove.timeSlots}).`
-          });
-        } catch {}
-      }
     } catch (error) {
       throw error;
     }

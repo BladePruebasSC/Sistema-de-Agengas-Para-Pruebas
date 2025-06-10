@@ -88,7 +88,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
       toast.success(
         <div>
           <p className="font-bold">¡Cita confirmada!</p>
-          <p>Se abrirá WhatsApp para enviar confirmación</p>
+          <p>Se enviará notificación al barbero por WhatsApp</p>
         </div>,
         { duration: 5000 }
       );
@@ -180,7 +180,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
         <div className="mt-6 flex items-center">
           <MessageSquare className="h-5 w-5 text-green-600 mr-2" />
           <p className="text-sm text-gray-600">
-            Se abrirá WhatsApp automáticamente para enviar confirmación después de reservar.
+            Se notificará automáticamente al barbero por WhatsApp después de reservar.
           </p>
         </div>
         <div className="mt-6">
