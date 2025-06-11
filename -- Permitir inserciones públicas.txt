@@ -1,0 +1,9 @@
+-- Permitir inserciones públicas
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Insert" ON customers FOR INSERT USING (true) WITH CHECK (true);
+
+ALTER TABLE quotes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public insert" ON quotes FOR INSERT USING (true) WITH CHECK (true);
+
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Insert" ON products FOR INSERT USING (true) WITH CHECK (true);--

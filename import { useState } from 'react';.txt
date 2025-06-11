@@ -1,0 +1,60 @@
+import { useState } from 'react';
+import { supabase } from '../supabaseClient';
+
+const AddProductForm = ({ fetchProducts }: { fetchProducts: () => void }) => {
+  const [newProduct, setNewProduct] = useState({
+    title: '',
+    description: '',
+    price: '',
+    category: '',
+    image_url: '',
+    specs: {}
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { error } = await supabase.from('products').insert([{
+        ...newProduct,
+        price: parseFloat(newProduct.price),
+        rating: 0,
+        specs: JSON.stringify(newProduct.specs)
+      }]);
+
+      if (error) throw error;
+
+      setNewProduct({
+        title: '',
+        description: '',
+        price: '',
+        category: '',
+        image_url: '',
+        specs: {}
+      });
+      
+      await fetchProducts();
+    } catch (err: any) {
+      console.error('Error adding product:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleAddProduct}>
+      {/* Form fields for title, description, price, category, image_url, specs */}
+      <button type="submit" disabled={loading}>
+        {loading ? 'Adding...' : 'Add Product'}
+      </button>
+      {error && <p className="error">{error}</p>}
+    </form>
+  );
+};
+
+export default AddProductForm;
