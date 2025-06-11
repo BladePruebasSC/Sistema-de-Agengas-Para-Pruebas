@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, XCircle, Settings as SettingsIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, XCircle, Settings as SettingsIcon, BarChart3 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
 import HolidayForm from './HolidayForm';
 import BlockedTimeForm from './BlockedTimeForm';
 import AdminSettings from './AdminSettings';
+import StatisticsPanel from './StatisticsPanel';
 import AppointmentList from '../AppointmentList';
 import { Holiday, BlockedTime } from '../../types';
 
 const AdminPanel: React.FC = () => {
-  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes' | 'settings'>('appointments');
+  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes' | 'settings' | 'statistics'>('appointments');
   const { holidays, blockedTimes, removeHoliday, removeBlockedTime } = useAppointments();
 
   return (
@@ -18,9 +19,9 @@ const AdminPanel: React.FC = () => {
       <div className="p-6">
         <h2 className="text-2xl font-semibold mb-4">Panel de Administración</h2>
         
-        <div className="flex border-b border-gray-200 mb-6">
+        <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
           <button
-            className={`py-2 px-4 font-medium text-sm ${
+            className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
               tab === 'appointments'
                 ? 'text-red-600 border-b-2 border-red-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -30,7 +31,17 @@ const AdminPanel: React.FC = () => {
             Citas
           </button>
           <button
-            className={`py-2 px-4 font-medium text-sm ${
+            className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
+              tab === 'statistics'
+                ? 'text-red-600 border-b-2 border-red-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('statistics')}
+          >
+            Estadísticas
+          </button>
+          <button
+            className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
               tab === 'holidays'
                 ? 'text-red-600 border-b-2 border-red-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -40,7 +51,7 @@ const AdminPanel: React.FC = () => {
             Gestión de Feriados
           </button>
           <button
-            className={`py-2 px-4 font-medium text-sm ${
+            className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
               tab === 'blockedTimes'
                 ? 'text-red-600 border-b-2 border-red-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -50,7 +61,7 @@ const AdminPanel: React.FC = () => {
             Horas Bloqueadas
           </button>
           <button
-            className={`py-2 px-4 font-medium text-sm ${
+            className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
               tab === 'settings'
                 ? 'text-red-600 border-b-2 border-red-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -63,6 +74,10 @@ const AdminPanel: React.FC = () => {
         
         {tab === 'appointments' && (
           <AppointmentList />
+        )}
+
+        {tab === 'statistics' && (
+          <StatisticsPanel />
         )}
 
         {tab === 'holidays' && (
