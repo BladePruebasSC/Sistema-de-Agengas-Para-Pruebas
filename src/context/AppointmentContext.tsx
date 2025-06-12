@@ -9,6 +9,7 @@ import { format, startOfDay } from 'date-fns';
 interface AdminSettings {
   early_booking_restriction: boolean;
   early_booking_hours: number;
+  restricted_hours: string[];
 }
 
 interface AppointmentContextType {
@@ -66,29 +67,37 @@ const getAvailableHoursForDate = (date: Date): string[] => {
   }
 };
 
-// Convierte "15:00" en "3:00 pm" para mostrar en UI
+// Convierte "15:00" en "3:00 PM" para mostrar en UI
 const formatHour12h = (hour24: string): string => {
   if (!hour24) return '';
   const [h, m] = hour24.split(':');
   let hour = parseInt(h, 10);
   const minute = m || '00';
-  const ampm = hour >= 12 ? 'pm' : 'am';
+  const ampm = hour >= 12 ? 'PM' : 'AM';
   hour = hour % 12 || 12;
   return `${hour}:${minute} ${ampm}`;
 };
 
-// Función para verificar restricción de horarios tempranos
-const isEarlyHourRestricted = (date: Date, time: string, adminSettings: AdminSettings): boolean => {
+// Función para verificar restricción de horarios con antelación
+const isRestrictedHourWithAdvance = (date: Date, time: string, adminSettings: AdminSettings): boolean => {
   if (!adminSettings.early_booking_restriction) return false;
   
-  // Solo aplica para 7:00 AM y 8:00 AM
-  if (time !== '7:00 AM' && time !== '8:00 AM') return false;
+  // Verificar si el horario está en la lista de horarios restringidos
+  if (!adminSettings.restricted_hours?.includes(time)) return false;
   
   const now = new Date();
   const appointmentDateTime = new Date(date);
   
-  // Convertir tiempo a 24h para comparación
-  const hour = time === '7:00 AM' ? 7 : 8;
+  // Convertir tiempo de 12h a 24h para comparación
+  let hour = 0;
+  if (time.includes('AM')) {
+    hour = parseInt(time.split(':')[0]);
+    if (hour === 12) hour = 0;
+  } else if (time.includes('PM')) {
+    hour = parseInt(time.split(':')[0]);
+    if (hour !== 12) hour += 12;
+  }
+  
   appointmentDateTime.setHours(hour, 0, 0, 0);
   
   const diffMs = appointmentDateTime.getTime() - now.getTime();
@@ -113,7 +122,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [adminSettings, setAdminSettings] = useState<AdminSettings>({
     early_booking_restriction: false,
-    early_booking_hours: 12
+    early_booking_hours: 12,
+    restricted_hours: ['7:00 AM', '8:00 AM']
   });
   const [userPhone, setUserPhone] = useState<string | null>(() => localStorage.getItem('userPhone'));
 
@@ -132,7 +142,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (data) {
         setAdminSettings({
           early_booking_restriction: data.early_booking_restriction,
-          early_booking_hours: data.early_booking_hours
+          early_booking_hours: data.early_booking_hours,
+          restricted_hours: data.restricted_hours || ['7:00 AM', '8:00 AM']
         });
       }
     } catch (error) {
@@ -217,8 +228,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const isTimeSlotAvailable = useCallback(async (date: Date, time: string): Promise<boolean> => {
     try {
-      // Verificar restricción de horarios tempranos
-      if (isEarlyHourRestricted(date, time, adminSettings)) {
+      // Verificar restricción de horarios con antelación
+      if (isRestrictedHourWithAdvance(date, time, adminSettings)) {
         return false;
       }
 
@@ -276,7 +287,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
 
     for (const hour of hours) {
-      const isRestricted = isEarlyHourRestricted(date, hour, adminSettings);
+      const isRestricted = isRestrictedHourWithAdvance(date, hour, adminSettings);
       availability[hour] = !(blockedSlots.has(hour) || takenSlots.has(hour) || isRestricted);
     }
     return availability;
@@ -284,9 +295,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const createAppointment = async (appointmentData: CreateAppointmentData): Promise<Appointment> => {
     try {
-      // Verificar restricción de horarios tempranos antes de crear
-      if (isEarlyHourRestricted(appointmentData.date, appointmentData.time, adminSettings)) {
-        throw new Error(`Este horario requiere reserva con ${adminSettings.early_booking_hours} horas de antelación`);
+      // Verificar restricción de horarios con antelación antes de crear
+      if (isRestrictedHourWithAdvance(appointmentData.date, appointmentData.time, adminSettings)) {
+        const restrictedHours = adminSettings.restricted_hours?.join(', ') || 'ciertos horarios';
+        throw new Error(`Los horarios ${restrictedHours} requieren reserva con ${adminSettings.early_booking_hours} horas de antelación`);
       }
 
       const formattedDate = formatDateForSupabase(appointmentData.date);

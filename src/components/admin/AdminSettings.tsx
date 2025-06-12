@@ -7,6 +7,7 @@ interface AdminSettings {
   id?: string;
   early_booking_restriction: boolean;
   early_booking_hours: number;
+  restricted_hours: string[];
   created_at?: string;
   updated_at?: string;
 }
@@ -14,10 +15,18 @@ interface AdminSettings {
 const AdminSettings: React.FC = () => {
   const [settings, setSettings] = useState<AdminSettings>({
     early_booking_restriction: false,
-    early_booking_hours: 12
+    early_booking_hours: 12,
+    restricted_hours: ['7:00 AM', '8:00 AM']
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Todas las horas disponibles para seleccionar
+  const allAvailableHours = [
+    '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', 
+    '7:00 PM', '8:00 PM', '9:00 PM'
+  ];
 
   useEffect(() => {
     loadSettings();
@@ -35,7 +44,10 @@ const AdminSettings: React.FC = () => {
       }
 
       if (data) {
-        setSettings(data);
+        setSettings({
+          ...data,
+          restricted_hours: data.restricted_hours || ['7:00 AM', '8:00 AM']
+        });
       }
     } catch (error) {
       console.error('Error cargando configuración:', error);
@@ -53,15 +65,18 @@ const AdminSettings: React.FC = () => {
         .select('id')
         .single();
 
+      const settingsToSave = {
+        early_booking_restriction: settings.early_booking_restriction,
+        early_booking_hours: settings.early_booking_hours,
+        restricted_hours: settings.restricted_hours,
+        updated_at: new Date().toISOString()
+      };
+
       if (existingSettings) {
         // Actualizar configuración existente
         const { error } = await supabase
           .from('admin_settings')
-          .update({
-            early_booking_restriction: settings.early_booking_restriction,
-            early_booking_hours: settings.early_booking_hours,
-            updated_at: new Date().toISOString()
-          })
+          .update(settingsToSave)
           .eq('id', existingSettings.id);
 
         if (error) throw error;
@@ -69,10 +84,7 @@ const AdminSettings: React.FC = () => {
         // Crear nueva configuración
         const { error } = await supabase
           .from('admin_settings')
-          .insert([{
-            early_booking_restriction: settings.early_booking_restriction,
-            early_booking_hours: settings.early_booking_hours
-          }]);
+          .insert([settingsToSave]);
 
         if (error) throw error;
       }
@@ -83,6 +95,21 @@ const AdminSettings: React.FC = () => {
       toast.error('Error al guardar la configuración');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRestrictedHourToggle = (hour: string) => {
+    const currentHours = settings.restricted_hours || [];
+    if (currentHours.includes(hour)) {
+      setSettings({
+        ...settings,
+        restricted_hours: currentHours.filter(h => h !== hour)
+      });
+    } else {
+      setSettings({
+        ...settings,
+        restricted_hours: [...currentHours, hour]
+      });
     }
   };
 
@@ -107,9 +134,9 @@ const AdminSettings: React.FC = () => {
           <div className="flex items-start space-x-3">
             <Clock className="h-5 w-5 text-orange-500 mt-1" />
             <div className="flex-1">
-              <h3 className="text-lg font-medium mb-2">Restricción de Reservas Tempranas</h3>
+              <h3 className="text-lg font-medium mb-2">Restricción de Reservas con Antelación</h3>
               <p className="text-gray-600 text-sm mb-4">
-                Controla si las citas de 7:00 AM y 8:00 AM requieren reserva con antelación.
+                Controla qué horarios requieren reserva con antelación.
               </p>
               
               <div className="space-y-4">
@@ -124,32 +151,60 @@ const AdminSettings: React.FC = () => {
                     className="rounded border-gray-300 text-red-600 focus:ring-red-500"
                   />
                   <span className="ml-2 text-sm font-medium">
-                    Activar restricción para horarios de 7:00 AM y 8:00 AM
+                    Activar restricción de antelación para horarios específicos
                   </span>
                 </label>
 
                 {settings.early_booking_restriction && (
-                  <div className="ml-6 space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Horas de antelación requeridas:
-                    </label>
-                    <select
-                      value={settings.early_booking_hours}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        early_booking_hours: parseInt(e.target.value)
-                      })}
-                      className="block w-32 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
-                    >
-                      <option value={6}>6 horas</option>
-                      <option value={12}>12 horas</option>
-                      <option value={24}>24 horas</option>
-                      <option value={48}>48 horas</option>
-                    </select>
-                    <p className="text-xs text-gray-500">
-                      Los clientes deberán reservar con al menos {settings.early_booking_hours} horas de antelación 
-                      para los horarios de 7:00 AM y 8:00 AM.
-                    </p>
+                  <div className="ml-6 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Horas de antelación requeridas:
+                      </label>
+                      <select
+                        value={settings.early_booking_hours}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          early_booking_hours: parseInt(e.target.value)
+                        })}
+                        className="block w-32 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
+                      >
+                        <option value={6}>6 horas</option>
+                        <option value={12}>12 horas</option>
+                        <option value={24}>24 horas</option>
+                        <option value={48}>48 horas</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Selecciona los horarios que requieren antelación:
+                      </label>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                        {allAvailableHours.map((hour) => (
+                          <label
+                            key={hour}
+                            className={`flex items-center justify-center p-2 border rounded-md cursor-pointer transition-colors ${
+                              settings.restricted_hours?.includes(hour)
+                                ? 'bg-orange-100 border-orange-300 text-orange-800'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={settings.restricted_hours?.includes(hour) || false}
+                              onChange={() => handleRestrictedHourToggle(hour)}
+                            />
+                            <span className="text-sm">{hour}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Los clientes deberán reservar con al menos {settings.early_booking_hours} horas de antelación 
+                        para los horarios seleccionados.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
