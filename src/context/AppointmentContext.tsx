@@ -3,8 +3,8 @@ import { Appointment, Holiday, BlockedTime } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../services/whatsappService';
-import { formatDateForSupabase, parseSupabaseDate } from '../utils/dateUtils';
-import { format, isSameDay, startOfDay, isBefore } from 'date-fns';
+import { formatDateForSupabase, parseSupabaseDate, isSameDate, isDateBefore, isFutureDate } from '../utils/dateUtils';
+import { format, startOfDay } from 'date-fns';
 
 interface AdminSettings {
   early_booking_restriction: boolean;
@@ -28,8 +28,9 @@ interface AppointmentContextType {
   getDayAvailability: (date: Date) => Promise<{ [hour: string]: boolean }>;
   getAvailableHoursForDate: (date: Date) => string[];
   formatHour12h: (hour24: string) => string;
-  cleanupPastAppointments: () => Promise<void>;
   loadAdminSettings: () => Promise<void>;
+  // Función para obtener solo citas futuras (para mostrar en admin)
+  getFutureAppointments: () => Appointment[];
 }
 
 // Genera un rango de horas en formato HH:00
@@ -139,33 +140,14 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
-  // Función para limpiar citas pasadas
-  const cleanupPastAppointments = async () => {
-    try {
-      const today = startOfDay(new Date());
-      const todayFormatted = formatDateForSupabase(today);
-      
-      // Eliminar citas anteriores a hoy
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .lt('date', todayFormatted);
-      
-      if (error) {
-        console.error('Error cleaning up past appointments:', error);
-        return;
-      }
-      
-      // Actualizar el estado local
-      setAppointments(prev => 
-        prev.filter(appointment => !isBefore(appointment.date, today))
-      );
-      
-      console.log('Past appointments cleaned up successfully');
-    } catch (error) {
-      console.error('Error in cleanupPastAppointments:', error);
-    }
-  };
+  // Función para obtener solo citas futuras (incluyendo hoy)
+  const getFutureAppointments = useCallback((): Appointment[] => {
+    const today = new Date();
+    return appointments.filter(appointment => {
+      // Incluir citas de hoy y futuras
+      return isSameDate(appointment.date, today) || isFutureDate(appointment.date);
+    });
+  }, [appointments]);
 
   const fetchAppointments = async () => {
     try {
@@ -193,7 +175,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw error;
       const formattedHolidays = data.map(holiday => ({
         ...holiday,
-        date: new Date(holiday.date)
+        date: parseSupabaseDate(holiday.date)
       }));
       setHolidays(formattedHolidays);
     } catch (error) {
@@ -210,7 +192,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw error;
       const formattedBlockedTimes = data.map(blockedTime => ({
         ...blockedTime,
-        date: new Date(blockedTime.date)
+        date: parseSupabaseDate(blockedTime.date)
       }));
       setBlockedTimes(formattedBlockedTimes);
     } catch (error) {
@@ -222,9 +204,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     const initializeData = async () => {
       // Primero cargar configuración de admin
       await loadAdminSettings();
-      // Luego limpiar citas pasadas
-      await cleanupPastAppointments();
-      // Finalmente cargar todos los datos
+      // Cargar todos los datos (ya no limpiamos citas pasadas)
       await Promise.all([
         fetchAppointments(),
         fetchHolidays(),
@@ -248,6 +228,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         supabase.from('blocked_times').select('time,timeSlots').eq('date', formattedDate),
         supabase.from('appointments').select('id,time').eq('date', formattedDate).eq('time', time)
       ]);
+      
       if (holidaysData && holidaysData.length > 0) return false;
       if (blockedData && blockedData.some(block =>
         (block.time && block.time === time) ||
@@ -463,8 +444,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     getDayAvailability,
     getAvailableHoursForDate,
     formatHour12h,
-    cleanupPastAppointments,
     loadAdminSettings,
+    getFutureAppointments,
   };
 
   return (

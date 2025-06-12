@@ -4,6 +4,7 @@ import { es } from 'date-fns/locale';
 import Calendar from 'react-calendar';
 import { useAppointments } from '../../context/AppointmentContext';
 import TimeSlotPicker from './TimeSlotPicker';
+import { isSameDate } from '../../utils/dateUtils';
 import './Calendar.css';
 
 // Horarios actualizados según los nuevos requerimientos
@@ -126,12 +127,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   }, [selectedDate, checkAvailability]);
 
   const isHoliday = useCallback((date: Date) => {
-    return holidays.some(
-      holiday =>
-        holiday.date.getFullYear() === date.getFullYear() &&
-        holiday.date.getMonth() === date.getMonth() &&
-        holiday.date.getDate() === date.getDate()
-    );
+    return holidays.some(holiday => isSameDate(holiday.date, date));
   }, [holidays]);
 
   const tileClassName = ({ date, view }: { date: Date; view: string }) => {

@@ -13,6 +13,7 @@ import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'd
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
 import { services } from '../../utils/mockData';
+import { isSameDate, isDateBefore } from '../../utils/dateUtils';
 
 interface MonthlyStats {
   month: string;
@@ -59,9 +60,10 @@ const StatisticsPanel: React.FC = () => {
       const start = startOfMonth(date);
       const end = endOfMonth(date);
       
-      const monthAppointments = appointments.filter(app => 
-        isWithinInterval(app.date, { start, end })
-      );
+      const monthAppointments = appointments.filter(app => {
+        const appDate = new Date(app.date);
+        return appDate >= start && appDate <= end;
+      });
       
       const revenue = monthAppointments.reduce((total, app) => {
         const service = services.find(s => s.id === app.service);
@@ -80,9 +82,10 @@ const StatisticsPanel: React.FC = () => {
     // Estadísticas del mes seleccionado
     const start = startOfMonth(selectedMonth);
     const end = endOfMonth(selectedMonth);
-    const currentMonthAppointments = appointments.filter(app => 
-      isWithinInterval(app.date, { start, end })
-    );
+    const currentMonthAppointments = appointments.filter(app => {
+      const appDate = new Date(app.date);
+      return appDate >= start && appDate <= end;
+    });
 
     // Estadísticas por servicio
     const serviceCount = new Map<string, number>();
@@ -132,9 +135,10 @@ const StatisticsPanel: React.FC = () => {
     const previousMonth = subMonths(selectedMonth, 1);
     const prevStart = startOfMonth(previousMonth);
     const prevEnd = endOfMonth(previousMonth);
-    const previousMonthAppointments = appointments.filter(app => 
-      isWithinInterval(app.date, { start: prevStart, end: prevEnd })
-    );
+    const previousMonthAppointments = appointments.filter(app => {
+      const appDate = new Date(app.date);
+      return appDate >= prevStart && appDate <= prevEnd;
+    });
 
     const growthRate = previousMonthAppointments.length > 0 
       ? ((currentMonthAppointments.length - previousMonthAppointments.length) / previousMonthAppointments.length) * 100
@@ -337,6 +341,12 @@ const StatisticsPanel: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-800">
+          <strong>Nota:</strong> Las estadísticas incluyen todas las citas (pasadas, presentes y futuras) para un análisis completo del negocio.
+        </p>
       </div>
     </div>
   );
