@@ -7,66 +7,46 @@ import toast from 'react-hot-toast';
 import { useAppointments } from '../context/AppointmentContext';
 
 const BookingPage: React.FC = () => {
-  const { isTimeSlotAvailable } = useAppointments();
-  const [availableHours, setAvailableHours] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { adminSettings, barbers } = useAppointments();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>('');
-  const [bookingStep, setBookingStep] = useState<'select' | 'confirm'>('select');
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
 
-  const allHours = [
-    '7:00 AM',
-    '8:00 AM',
-    '9:00 AM',
-    '10:00 AM',
-    '11:00 AM',
-    '3:00 PM',
-    '4:00 PM',
-    '5:00 PM',
-    '6:00 PM',
-    '7:00 PM'
-  ];
-
-  // Verificar disponibilidad cuando cambie la fecha
-  const checkAvailableHours = useCallback(async (date: Date) => {
-    setIsLoading(true);
-    try {
-      const availableSlots = [];
-      for (const hour of allHours) {
-        const isAvailable = await isTimeSlotAvailable(date, hour);
-        if (isAvailable) {
-          availableSlots.push(hour);
-        }
-      }
-      setAvailableHours(availableSlots);
-    } catch (error) {
-      console.error('Error checking available hours:', error);
-      toast.error('Error al verificar horarios disponibles');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isTimeSlotAvailable, allHours]);
-
-  // Actualizar horas disponibles cuando cambie la fecha
+  // Auto-seleccionar barbero por defecto si no hay múltiples barberos habilitados
   useEffect(() => {
-    if (selectedDate) {
-      checkAvailableHours(selectedDate);
+    if (!adminSettings.multiple_barbers_enabled && adminSettings.default_barber_id) {
+      setSelectedBarberId(adminSettings.default_barber_id);
+    } else if (!adminSettings.multiple_barbers_enabled && barbers.length === 1) {
+      setSelectedBarberId(barbers[0].id);
     }
-  }, [selectedDate, checkAvailableHours]);
+  }, [adminSettings, barbers]);
 
-  const handleDateTimeSelected = (date: Date, time: string) => {
+  const handleDateTimeSelected = (date: Date, time: string, barberId?: string) => {
     setSelectedDate(date);
     setSelectedTime(time);
+    if (barberId) {
+      setSelectedBarberId(barberId);
+    }
   };
   
   const handleBookingSuccess = () => {
     setSelectedDate(null);
     setSelectedTime('');
-    setBookingStep('select');
+    setSelectedBarberId(null);
   };
   
   const handleCancelBooking = () => {
-    setBookingStep('select');
+    setSelectedTime('');
+  };
+
+  const handleBarberChange = (barberId: string | null) => {
+    setSelectedBarberId(barberId);
+    setSelectedTime(''); // Limpiar tiempo cuando cambia barbero
+  };
+
+  const getBarberName = (barberId: string) => {
+    const barber = barbers.find(b => b.id === barberId);
+    return barber?.name || 'Barbero';
   };
   
   return (
@@ -78,12 +58,14 @@ const BookingPage: React.FC = () => {
         onDateTimeSelected={handleDateTimeSelected}
         selectedDate={selectedDate}
         selectedTime={selectedTime}
+        selectedBarberId={selectedBarberId}
         onDateChange={setSelectedDate}
         onTimeChange={setSelectedTime}
+        onBarberChange={handleBarberChange}
       />
 
       {/* Formulario de reserva */}
-      {selectedDate && selectedTime && (
+      {selectedDate && selectedTime && (!adminSettings.multiple_barbers_enabled || selectedBarberId) && (
         <div className="mt-8">
           <div className="flex justify-between items-center mb-4">
             <button
@@ -95,12 +77,16 @@ const BookingPage: React.FC = () => {
             
             <div className="text-gray-600">
               Seleccionado: {format(selectedDate!, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })} a las {selectedTime}
+              {selectedBarberId && adminSettings.multiple_barbers_enabled && (
+                <span> con {getBarberName(selectedBarberId)}</span>
+              )}
             </div>
           </div>
           
           <BookingForm
             selectedDate={selectedDate!}
             selectedTime={selectedTime!}
+            selectedBarberId={selectedBarberId || undefined}
             onSuccess={handleBookingSuccess}
           />
         </div>

@@ -7,7 +7,7 @@ const AppointmentsPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [isVerified, setIsVerified] = useState(false);
   const [verifiedPhone, setVerifiedPhone] = useState('');
-  const { appointments, deleteAppointment } = useAppointments();
+  const { getActiveAppointments, cancelAppointment, barbers } = useAppointments();
 
   const formatPhoneNumber = (value: string) => {
     const numbers = value.replace(/\D/g, '');
@@ -43,10 +43,9 @@ const AppointmentsPage: React.FC = () => {
     
     if (isConfirmed) {
       try {
-        console.log('Intentando eliminar cita con ID:', id);
-        await deleteAppointment(id);
-        
-
+        console.log('Intentando cancelar cita con ID:', id);
+        await cancelAppointment(id);
+        toast.success('Cita cancelada exitosamente');
       } catch (error) {
         console.error('Error al cancelar la cita:', error);
         toast.error('Error al cancelar la cita. Por favor intente nuevamente.');
@@ -54,10 +53,17 @@ const AppointmentsPage: React.FC = () => {
     }
   };
 
+  const getBarberName = (barberId?: string) => {
+    if (!barberId) return 'No asignado';
+    const barber = barbers.find(b => b.id === barberId);
+    return barber?.name || 'Barbero desconocido';
+  };
+
   const userAppointments = React.useMemo(() => {
     if (!isVerified || !verifiedPhone) return [];
 
-    const filtered = appointments.filter(app => {
+    const allAppointments = getActiveAppointments();
+    const filtered = allAppointments.filter(app => {
       const cleanAppPhone = app.clientPhone?.replace(/\D/g, '') || '';
       const cleanVerifiedPhone = verifiedPhone.replace(/\D/g, '');
       
@@ -74,7 +80,7 @@ const AppointmentsPage: React.FC = () => {
 
     console.log('Citas encontradas:', filtered.length, filtered);
     return filtered;
-  }, [appointments, isVerified, verifiedPhone]);
+  }, [getActiveAppointments, isVerified, verifiedPhone]);
 
   // Componente de renderizado de citas
   const RenderAppointments = () => {
@@ -109,6 +115,10 @@ const AppointmentsPage: React.FC = () => {
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Hora:</span>{' '}
                     {appointment.time}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Barbero:</span>{' '}
+                    {getBarberName(appointment.barberId)}
                   </p>
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Teléfono:</span>{' '}

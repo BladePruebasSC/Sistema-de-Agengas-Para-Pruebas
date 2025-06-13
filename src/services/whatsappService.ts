@@ -4,9 +4,9 @@ interface WhatsAppMessageData {
   date: string;
   time: string;
   service: string;
+  barberName?: string;
+  barberPhone?: string;
 }
-
-const ADMIN_PHONE = '+18092033894';
 
 // Función para abrir WhatsApp Web con mensaje pre-escrito
 export const openWhatsAppWithMessage = (phone: string, message: string) => {
@@ -24,7 +24,7 @@ export const openWhatsAppWithMessage = (phone: string, message: string) => {
 };
 
 export const notifyAppointmentCreated = async (data: WhatsAppMessageData) => {
-  const adminMessage = `🔔 *NUEVA CITA REGISTRADA* 🔔
+  const barberMessage = `🔔 *NUEVA CITA REGISTRADA* 🔔
 
 ✂️ *D' Gastón Stylo Barbería*
 
@@ -33,12 +33,14 @@ export const notifyAppointmentCreated = async (data: WhatsAppMessageData) => {
 📅 *Fecha:* ${data.date}
 🕒 *Hora:* ${data.time}
 💼 *Servicio:* ${data.service}
+👨‍💼 *Barbero:* ${data.barberName || 'No especificado'}
 
 ¡Nueva cita confirmada en el sistema!`;
 
   try {
-    // Solo enviar mensaje al admin/dueño
-    openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
+    // Enviar mensaje al barbero asignado o al número por defecto
+    const targetPhone = data.barberPhone || '+18092033894';
+    openWhatsAppWithMessage(targetPhone, barberMessage);
     
     return { success: true };
   } catch (error) {
@@ -48,7 +50,7 @@ export const notifyAppointmentCreated = async (data: WhatsAppMessageData) => {
 };
 
 export const notifyAppointmentCancelled = async (data: WhatsAppMessageData) => {
-  const adminMessage = `❌ *CITA CANCELADA* ❌
+  const barberMessage = `❌ *CITA CANCELADA* ❌
 
 ✂️ *D' Gastón Stylo Barbería*
 
@@ -57,12 +59,14 @@ export const notifyAppointmentCancelled = async (data: WhatsAppMessageData) => {
 📅 *Fecha:* ${data.date}
 🕒 *Hora:* ${data.time}
 💼 *Servicio:* ${data.service}
+👨‍💼 *Barbero:* ${data.barberName || 'No especificado'}
 
 ⚠️ *El horario está ahora disponible para nuevas citas.*`;
 
   try {
-    // Solo enviar mensaje al admin/dueño
-    openWhatsAppWithMessage(ADMIN_PHONE, adminMessage);
+    // Enviar mensaje al barbero asignado o al número por defecto
+    const targetPhone = data.barberPhone || '+18092033894';
+    openWhatsAppWithMessage(targetPhone, barberMessage);
     
     return { success: true };
   } catch (error) {

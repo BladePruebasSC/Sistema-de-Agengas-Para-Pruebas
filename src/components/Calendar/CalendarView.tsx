@@ -4,36 +4,11 @@ import { es } from 'date-fns/locale';
 import Calendar from 'react-calendar';
 import { useAppointments } from '../../context/AppointmentContext';
 import TimeSlotPicker from './TimeSlotPicker';
+import BarberSelector from './BarberSelector';
 import { isSameDate } from '../../utils/dateUtils';
 import './Calendar.css';
 
-// Horarios actualizados según los nuevos requerimientos
-const ALL_HOURS = [
-  '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'
-];
-
-// Horarios específicos por día
-const getHoursForDay = (date: Date): string[] => {
-  const dayOfWeek = date.getDay();
-  
-  if (dayOfWeek === 0) {
-    // Domingo: 10:00 AM a 3:00 PM
-    return ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM'];
-  } else if (dayOfWeek === 3) {
-    // Miércoles: 7:00 AM a 12:00 PM y 3:00 PM a 7:00 PM
-    return [
-      '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-      '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM'
-    ];
-  } else {
-    // Resto de días: horarios normales
-    return ALL_HOURS;
-  }
-};
-
 function parseHourLabel(hourLabel: string): { hour: number; minute: number; isPm: boolean } {
-  // e.g. "7:00 AM", "3:00 PM"
   const [time, modifier] = hourLabel.split(' ');
   const [hourStr, minuteStr] = time.split(':');
   let hour = parseInt(hourStr, 10);
@@ -45,10 +20,7 @@ function parseHourLabel(hourLabel: string): { hour: number; minute: number; isPm
 }
 
 function isEarlyHourRestricted(date: Date, hourLabel: string, adminSettings: any) {
-  // Aplica solo para 7:00 AM y 8:00 AM de cualquier día
-  if (hourLabel !== '7:00 AM' && hourLabel !== '8:00 AM') return false;
-  
-  // Si la restricción no está activada, no aplicar
+  if (!adminSettings.restricted_hours?.includes(hourLabel)) return false;
   if (!adminSettings.early_booking_restriction) return false;
 
   const target = new Date(date);
@@ -62,32 +34,43 @@ function isEarlyHourRestricted(date: Date, hourLabel: string, adminSettings: any
 }
 
 interface CalendarViewProps {
-  onDateTimeSelected: (date: Date, time: string) => void;
+  onDateTimeSelected: (date: Date, time: string, barberId?: string) => void;
   selectedDate: Date | null;
   selectedTime: string | null;
+  selectedBarberId?: string | null;
   onDateChange: (date: Date) => void;
   onTimeChange: (time: string | null) => void;
+  onBarberChange?: (barberId: string | null) => void;
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({ 
   onDateTimeSelected,
   selectedDate,
   selectedTime,
+  selectedBarberId,
   onDateChange,
-  onTimeChange 
+  onTimeChange,
+  onBarberChange
 }) => {
-  const { isTimeSlotAvailable, holidays, adminSettings } = useAppointments();
+  const { 
+    isTimeSlotAvailable, 
+    holidays, 
+    adminSettings, 
+    barbers, 
+    getAvailableHoursForDate 
+  } = useAppointments();
+  
   const [availableHours, setAvailableHours] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const today = startOfDay(new Date());
 
-  // --- FILTRADO RÁPIDO Y BLOQUEO DE HORAS PASADAS Y RESTRICCIÓN DE HORAS TEMPRANAS ---
-  const getFilteredHours = (date: Date) => {
-    const hoursForDay = getHoursForDay(date);
+  // Filtrado rápido y bloqueo de horas pasadas y restricción de horas tempranas
+  const getFilteredHours = useCallback((date: Date, barberId?: string) => {
+    const hoursForDay = getAvailableHoursForDate(date);
     const now = new Date();
 
     return hoursForDay.filter(label => {
-      // Restricción para las primeras dos horas (configuración de admin)
+      // Restricción para horarios específicos (configuración de admin)
       if (isEarlyHourRestricted(date, label, adminSettings)) {
         return false;
       }
@@ -98,15 +81,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       }
       return true;
     });
-  };
+  }, [getAvailableHoursForDate, adminSettings]);
 
   // Consulta paralela de disponibilidad y filtrado de horas pasadas
-  const checkAvailability = useCallback(async (date: Date) => {
+  const checkAvailability = useCallback(async (date: Date, barberId?: string) => {
     setIsLoading(true);
     try {
-      const filteredHours = getFilteredHours(date);
+      const filteredHours = getFilteredHours(date, barberId);
       const results = await Promise.all(
-        filteredHours.map(hour => isTimeSlotAvailable(date, hour))
+        filteredHours.map(hour => isTimeSlotAvailable(date, hour, barberId))
       );
       const available = filteredHours.filter((hour, idx) => results[idx]);
       setAvailableHours(available);
@@ -116,15 +99,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [isTimeSlotAvailable, adminSettings]);
+  }, [isTimeSlotAvailable, getFilteredHours]);
 
   useEffect(() => {
     if (selectedDate) {
-      checkAvailability(selectedDate);
+      checkAvailability(selectedDate, selectedBarberId || undefined);
     } else {
       setAvailableHours([]);
     }
-  }, [selectedDate, checkAvailability]);
+  }, [selectedDate, selectedBarberId, checkAvailability]);
 
   const isHoliday = useCallback((date: Date) => {
     return holidays.some(holiday => isSameDate(holiday.date, date));
@@ -153,6 +136,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const handleTimeSelect = (time: string) => {
     onTimeChange(time);
+    if (selectedDate) {
+      onDateTimeSelected(selectedDate, time, selectedBarberId || undefined);
+    }
+  };
+
+  const handleBarberSelect = (barberId: string) => {
+    if (onBarberChange) {
+      onBarberChange(barberId);
+    }
+    // Limpiar tiempo seleccionado cuando cambia el barbero
+    onTimeChange(null);
   };
 
   const getBusinessHoursText = (date: Date) => {
@@ -167,8 +161,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const getRestrictionsText = () => {
-    if (adminSettings.early_booking_restriction) {
-      return `Nota: Los horarios de 7:00 AM y 8:00 AM requieren reserva con ${adminSettings.early_booking_hours} horas de antelación.`;
+    if (adminSettings.early_booking_restriction && adminSettings.restricted_hours?.length > 0) {
+      const hours = adminSettings.restricted_hours.join(', ');
+      return `Nota: Los horarios ${hours} requieren reserva con ${adminSettings.early_booking_hours} horas de antelación.`;
     }
     return null;
   };
@@ -202,8 +197,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           {selectedDate && (
             <div>
               <h3 className="text-lg font-medium mb-2">
-                2. Elige un Horario - {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
+                2. Selecciona {adminSettings.multiple_barbers_enabled ? 'Barbero y ' : ''}Horario
               </h3>
+              <p className="text-sm text-gray-600 mb-2">
+                {format(selectedDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
+              </p>
               <p className="text-sm text-gray-600 mb-2">
                 {getBusinessHoursText(selectedDate)}
               </p>
@@ -212,19 +210,43 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   {getRestrictionsText()}
                 </p>
               )}
-              {isLoading ? (
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="inline-block w-5 h-5 border-2 border-t-2 border-gray-300 border-t-red-500 rounded-full animate-spin"></span>
-                  <span className="text-gray-500">Cargando horarios...</span>
+
+              {/* Selector de barbero si está habilitado */}
+              {adminSettings.multiple_barbers_enabled && (
+                <div className="mb-4">
+                  <BarberSelector
+                    barbers={barbers}
+                    selectedBarberId={selectedBarberId}
+                    onSelectBarber={handleBarberSelect}
+                  />
                 </div>
-              ) : (
-                <TimeSlotPicker
-                  date={selectedDate}
-                  onSelectTime={handleTimeSelect}
-                  selectedTime={selectedTime}
-                  isHoliday={isHoliday(selectedDate)}
-                  availableHours={availableHours}
-                />
+              )}
+
+              {/* Selector de horarios */}
+              {(!adminSettings.multiple_barbers_enabled || selectedBarberId) && (
+                <>
+                  {isLoading ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="inline-block w-5 h-5 border-2 border-t-2 border-gray-300 border-t-red-500 rounded-full animate-spin"></span>
+                      <span className="text-gray-500">Cargando horarios...</span>
+                    </div>
+                  ) : (
+                    <TimeSlotPicker
+                      date={selectedDate}
+                      onSelectTime={handleTimeSelect}
+                      selectedTime={selectedTime}
+                      isHoliday={isHoliday(selectedDate)}
+                      availableHours={availableHours}
+                      barberId={selectedBarberId || undefined}
+                    />
+                  )}
+                </>
+              )}
+
+              {adminSettings.multiple_barbers_enabled && !selectedBarberId && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                  <p className="text-blue-600 font-medium">Selecciona un barbero para ver los horarios disponibles</p>
+                </div>
               )}
             </div>
           )}
