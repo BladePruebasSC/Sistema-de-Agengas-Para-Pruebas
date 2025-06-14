@@ -11,13 +11,13 @@ export interface CreateAppointmentData {
   clientPhone: string;
   service: string;
   confirmed: boolean;
-  barberId?: string;
+  barber_id?: string;
 }
 
 export interface Appointment extends CreateAppointmentData {
   id: string;
   created_at: string;
-  barberId?: string;
+  barber_id?: string;
   cancelled?: boolean;
   cancelled_at?: string;
 }

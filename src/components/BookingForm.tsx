@@ -24,7 +24,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
     clientName: '',
     clientPhone: '',
     service: services[0]?.id || '',
-    barberId: selectedBarberId || adminSettings.default_barber_id || ''
+    barber_id: selectedBarberId || adminSettings.default_barber_id || ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -71,8 +71,8 @@ const BookingForm: React.FC<BookingFormProps> = ({
     } else if (!/^\d{3}-\d{3}-\d{4}$/.test(formData.clientPhone)) {
       newErrors.clientPhone = 'Formato: 555-123-4567';
     }
-    if (adminSettings.multiple_barbers_enabled && !formData.barberId) {
-      newErrors.barberId = 'Debe seleccionar un barbero';
+    if (adminSettings.multiple_barbers_enabled && !formData.barber_id) {
+      newErrors.barber_id = 'Debe seleccionar un barbero';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -89,7 +89,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
         clientName: formData.clientName.trim(),
         clientPhone: cleanPhone,
         service: formData.service,
-        barberId: formData.barberId || adminSettings.default_barber_id,
+        barber_id: formData.barber_id || adminSettings.default_barber_id,
         confirmed: true
       });
       toast.success(
@@ -163,11 +163,11 @@ const BookingForm: React.FC<BookingFormProps> = ({
                 Selecciona el barbero
               </label>
               <select
-                name="barberId"
-                value={formData.barberId}
+                name="barber_id"
+                value={formData.barber_id}
                 onChange={handleChange}
                 className={`block w-full p-2 border ${
-                  errors.barberId ? 'border-red-500' : 'border-gray-300'
+                  errors.barber_id ? 'border-red-500' : 'border-gray-300'
                 } rounded-md shadow-sm focus:ring-red-500 focus:border-red-500`}
               >
                 <option value="">Seleccionar barbero</option>
@@ -177,8 +177,8 @@ const BookingForm: React.FC<BookingFormProps> = ({
                   </option>
                 ))}
               </select>
-              {errors.barberId && (
-                <p className="mt-1 text-sm text-red-600">{errors.barberId}</p>
+              {errors.barber_id && (
+                <p className="mt-1 text-sm text-red-600">{errors.barber_id}</p>
               )}
             </div>
           )}

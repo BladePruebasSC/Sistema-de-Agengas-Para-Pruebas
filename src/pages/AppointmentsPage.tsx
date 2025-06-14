@@ -53,9 +53,9 @@ const AppointmentsPage: React.FC = () => {
     }
   };
 
-  const getBarberName = (barberId?: string) => {
-    if (!barberId) return 'No asignado';
-    const barber = barbers.find(b => b.id === barberId);
+  const getBarberName = (barber_id?: string) => {
+    if (!barber_id) return 'No asignado';
+    const barber = barbers.find(b => b.id === barber_id);
     return barber?.name || 'Barbero desconocido';
   };
 
@@ -118,7 +118,7 @@ const AppointmentsPage: React.FC = () => {
                   </p>
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Barbero:</span>{' '}
-                    {getBarberName(appointment.barberId)}
+                    {getBarberName(appointment.barber_id)}
                   </p>
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Teléfono:</span>{' '}

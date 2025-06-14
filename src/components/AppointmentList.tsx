@@ -19,9 +19,9 @@ const AppointmentList: React.FC = () => {
     return a.time.localeCompare(b.time);
   });
 
-  const getBarberName = (barberId?: string) => {
-    if (!barberId) return 'No asignado';
-    const barber = barbers.find(b => b.id === barberId);
+  const getBarberName = (barber_id?: string) => {
+    if (!barber_id) return 'No asignado';
+    const barber = barbers.find(b => b.id === barber_id);
     return barber?.name || 'Barbero desconocido';
   };
 
@@ -54,7 +54,7 @@ const AppointmentList: React.FC = () => {
                   </td>
                   <td className="px-4 py-2 border">{appointment.time}</td>
                   <td className="px-4 py-2 border">{appointment.service}</td>
-                  <td className="px-4 py-2 border">{getBarberName(appointment.barberId)}</td>
+                  <td className="px-4 py-2 border">{getBarberName(appointment.barber_id)}</td>
                   <td className="px-4 py-2 border">
                     {appointment.confirmed ? (
                       <span className="text-green-600 font-medium">Confirmada</span>
