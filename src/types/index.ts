@@ -12,6 +12,7 @@ export interface CreateAppointmentData {
   service: string;
   confirmed: boolean;
   barber_id?: string;
+  barberId?: string; // Compatibilidad hacia atrás
 }
 
 export interface Appointment extends CreateAppointmentData {

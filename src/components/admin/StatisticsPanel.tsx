@@ -7,9 +7,11 @@ import {
   Clock, 
   DollarSign,
   Award,
-  Activity
+  Activity,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, addMonths, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
 import { services } from '../../utils/mockData';
@@ -54,13 +56,16 @@ const StatisticsPanel: React.FC = () => {
   }, [appointments, selectedMonth]);
 
   const calculateStatistics = () => {
+    // Filtrar solo citas NO canceladas para estadísticas
+    const activeAppointments = appointments.filter(app => !app.cancelled);
+
     // Estadísticas de los últimos 6 meses
     const last6Months = Array.from({ length: 6 }, (_, i) => {
-      const date = subMonths(new Date(), i);
+      const date = subMonths(selectedMonth, i);
       const start = startOfMonth(date);
       const end = endOfMonth(date);
       
-      const monthAppointments = appointments.filter(app => {
+      const monthAppointments = activeAppointments.filter(app => {
         const appDate = new Date(app.date);
         return appDate >= start && appDate <= end;
       });
@@ -82,7 +87,7 @@ const StatisticsPanel: React.FC = () => {
     // Estadísticas del mes seleccionado
     const start = startOfMonth(selectedMonth);
     const end = endOfMonth(selectedMonth);
-    const currentMonthAppointments = appointments.filter(app => {
+    const currentMonthAppointments = activeAppointments.filter(app => {
       const appDate = new Date(app.date);
       return appDate >= start && appDate <= end;
     });
@@ -135,7 +140,7 @@ const StatisticsPanel: React.FC = () => {
     const previousMonth = subMonths(selectedMonth, 1);
     const prevStart = startOfMonth(previousMonth);
     const prevEnd = endOfMonth(previousMonth);
-    const previousMonthAppointments = appointments.filter(app => {
+    const previousMonthAppointments = activeAppointments.filter(app => {
       const appDate = new Date(app.date);
       return appDate >= prevStart && appDate <= prevEnd;
     });
@@ -152,6 +157,14 @@ const StatisticsPanel: React.FC = () => {
       mostPopularHour: hourStatsArray[0]?.hour || 'N/A',
       growthRate: Math.round(growthRate * 10) / 10
     });
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setSelectedMonth(subMonths(selectedMonth, 1));
+    } else {
+      setSelectedMonth(addMonths(selectedMonth, 1));
+    }
   };
 
   const StatCard: React.FC<{
@@ -186,14 +199,29 @@ const StatisticsPanel: React.FC = () => {
           Estadísticas
         </h2>
         
-        <div className="flex items-center space-x-2">
-          <label className="text-sm font-medium text-gray-700">Mes:</label>
-          <input
-            type="month"
-            value={format(selectedMonth, 'yyyy-MM')}
-            onChange={(e) => setSelectedMonth(new Date(e.target.value + '-01'))}
-            className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:ring-red-500 focus:border-red-500"
-          />
+        {/* Navegador de mes mejorado */}
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => navigateMonth('prev')}
+            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+            title="Mes anterior"
+          >
+            <ChevronLeft className="h-5 w-5 text-gray-600" />
+          </button>
+          
+          <div className="text-center min-w-[140px]">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {format(selectedMonth, 'MMMM yyyy', { locale: es })}
+            </h3>
+          </div>
+          
+          <button
+            onClick={() => navigateMonth('next')}
+            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+            title="Mes siguiente"
+          >
+            <ChevronRight className="h-5 w-5 text-gray-600" />
+          </button>
         </div>
       </div>
 
@@ -345,7 +373,7 @@ const StatisticsPanel: React.FC = () => {
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          <strong>Nota:</strong> Las estadísticas incluyen todas las citas (pasadas, presentes y futuras) para un análisis completo del negocio.
+          <strong>Nota:</strong> Las estadísticas incluyen solo las citas activas (no canceladas) para un análisis preciso del negocio.
         </p>
       </div>
     </div>

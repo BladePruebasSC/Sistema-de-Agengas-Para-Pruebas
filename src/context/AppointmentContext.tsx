@@ -389,30 +389,31 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
       const formattedDate = formatDateForSupabase(appointmentData.date);
       
-      // Si no se especifica barbero y hay múltiples barberos habilitados, usar el por defecto
-      let barberId = appointmentData.barberId;
-      if (!barberId && adminSettings.default_barber_id) {
-        barberId = adminSettings.default_barber_id;
-      }
+      // Usar el barberId que viene en appointmentData, no el por defecto
+      const barberId = appointmentData.barber_id || appointmentData.barberId || adminSettings.default_barber_id;
       
       const { data: newAppointment, error } = await supabase
         .from('appointments')
         .insert([{ 
-          ...appointmentData, 
           date: formattedDate,
+          time: appointmentData.time,
+          clientName: appointmentData.clientName,
+          clientPhone: appointmentData.clientPhone,
+          service: appointmentData.service,
+          confirmed: appointmentData.confirmed,
           barber_id: barberId,
           cancelled: false
         }])
         .select(`
           *,
-          barber:barbers(id, name)
+          barber:barbers(id, name, phone)
         `)
         .single();
       if (error) throw new Error('Error al crear la cita en la base de datos');
       
       try {
-        // Obtener el teléfono del barbero para la notificación
-        const barber = barbers.find(b => b.id === barberId);
+        // Obtener el barbero para la notificación
+        const barber = barbers.find(b => b.id === barberId) || newAppointment.barber;
         const barberPhone = barber?.phone || '+18092033894';
         
         // Enviar notificaciones por WhatsApp Web
@@ -466,7 +467,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       
       try {
         // Obtener el barbero para la notificación
-        const barber = barbers.find(b => b.id === appointmentToCancel.barberId);
+        const barber = barbers.find(b => b.id === appointmentToCancel.barber_id);
         const barberPhone = barber?.phone || '+18092033894';
         
         // Enviar notificaciones de cancelación por WhatsApp Web
