@@ -9,7 +9,8 @@ interface TimeSlotPickerProps {
   onSelectTime: (time: string) => void;
   selectedTime: string | null;
   isHoliday: boolean;
-  availableHours: string[]; // Añadir esta prop
+  availableHours: string[];
+  barberId?: string;
 }
 
 const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({ 
@@ -17,9 +18,10 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   onSelectTime,
   selectedTime, 
   isHoliday,
-  availableHours
+  availableHours,
+  barberId
 }) => {
-  const { blockedTimes, appointments } = useAppointments();
+  const { blockedTimes, appointments, getAvailableHoursForDate } = useAppointments();
   
   // Encontrar los horarios bloqueados para la fecha seleccionada
   const blockedTimesForDate = blockedTimes.find(
@@ -28,7 +30,7 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   
   // Encontrar las citas para la fecha seleccionada
   const appointmentsForDate = appointments.filter(
-    app => isSameDate(app.date, date)
+    app => isSameDate(app.date, date) && !app.cancelled
   );
   
   const isTimeSlotBlocked = (time: string): boolean => {
@@ -48,7 +50,13 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   
   const isTimeSlotBooked = (time: string): boolean => {
     // Verificar si hay una cita en ese horario
-    return appointmentsForDate.some(app => app.time === time);
+    if (barberId) {
+      // Si hay barbero específico, verificar solo para ese barbero
+      return appointmentsForDate.some(app => app.time === time && app.barber_id === barberId);
+    } else {
+      // Si no hay barbero específico, verificar todas las citas
+      return appointmentsForDate.some(app => app.time === time);
+    }
   };
   
   const isTimeSlotAvailable = (time: string): boolean => {
@@ -64,29 +72,8 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
     );
   }
   
-  // Horarios específicos por día de la semana
-  const getHoursForDay = (date: Date): string[] => {
-    const dayOfWeek = date.getDay();
-    
-    if (dayOfWeek === 0) {
-      // Domingo: 10:00 AM a 3:00 PM
-      return ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM'];
-    } else if (dayOfWeek === 3) {
-      // Miércoles: 7:00 AM a 12:00 PM y 3:00 PM a 7:00 PM
-      return [
-        '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-        '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM' , '7:00 PM'
-      ];
-    } else {
-      // Resto de días: horarios normales
-      return [
-        '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-        '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'
-      ];
-    }
-  };
-
-  const allHours = getHoursForDay(date);
+  // Usar los horarios dinámicos basados en la configuración de negocio
+  const allHours = getAvailableHoursForDate(date);
 
   if (allHours.length === 0) {
     return (

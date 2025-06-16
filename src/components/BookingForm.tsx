@@ -83,13 +83,17 @@ const BookingForm: React.FC<BookingFormProps> = ({
     if (!validateForm()) return;
     try {
       const cleanPhone = formData.clientPhone.replace(/\D/g, '');
+      
+      // Usar el barbero seleccionado o el por defecto
+      const finalBarberId = selectedBarberId || formData.barber_id || adminSettings.default_barber_id;
+      
       await createAppointment({
         date: selectedDate,
         time: selectedTime,
         clientName: formData.clientName.trim(),
         clientPhone: cleanPhone,
         service: formData.service,
-        barber_id: formData.barber_id || adminSettings.default_barber_id,
+        barber_id: finalBarberId, // Asegurar que se use el barbero correcto
         confirmed: true
       });
       toast.success(

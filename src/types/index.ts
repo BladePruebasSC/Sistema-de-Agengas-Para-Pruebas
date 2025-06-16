@@ -12,6 +12,7 @@ export interface CreateAppointmentData {
   service: string;
   confirmed: boolean;
   barber_id?: string;
+  barberId?: string; // Compatibilidad hacia atrás
 }
 
 export interface Appointment extends CreateAppointmentData {
@@ -82,6 +83,33 @@ export interface AdminSettings {
   default_barber_id?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Review {
+  id: string;
+  client_name: string;
+  client_phone: string;
+  rating: number;
+  comment: string;
+  service_used: string;
+  barber_id?: string;
+  is_verified: boolean;
+  is_approved: boolean;
+  created_at: string;
+  updated_at: string;
+  barber?: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateReviewData {
+  client_name: string;
+  client_phone: string;
+  rating: number;
+  comment: string;
+  service_used: string;
+  barber_id?: string;
 }
 
 export type DayOfWeek = 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';

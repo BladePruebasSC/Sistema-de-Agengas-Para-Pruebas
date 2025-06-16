@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, XCircle, Settings as SettingsIcon, BarChart3 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, XCircle, Settings as SettingsIcon, BarChart3, Star } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
@@ -8,10 +8,11 @@ import BlockedTimeForm from './BlockedTimeForm';
 import AdminSettings from './AdminSettings';
 import StatisticsPanel from './StatisticsPanel';
 import AppointmentList from '../AppointmentList';
+import ReviewsManagement from '../reviews/ReviewsManagement';
 import { Holiday, BlockedTime } from '../../types';
 
 const AdminPanel: React.FC = () => {
-  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes' | 'settings' | 'statistics'>('appointments');
+  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes' | 'settings' | 'statistics' | 'reviews'>('appointments');
   const { holidays, blockedTimes, removeHoliday, removeBlockedTime } = useAppointments();
 
   return (
@@ -39,6 +40,16 @@ const AdminPanel: React.FC = () => {
             onClick={() => setTab('statistics')}
           >
             Estadísticas
+          </button>
+          <button
+            className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
+              tab === 'reviews'
+                ? 'text-red-600 border-b-2 border-red-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setTab('reviews')}
+          >
+            Reseñas
           </button>
           <button
             className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
@@ -78,6 +89,10 @@ const AdminPanel: React.FC = () => {
 
         {tab === 'statistics' && (
           <StatisticsPanel />
+        )}
+
+        {tab === 'reviews' && (
+          <ReviewsManagement />
         )}
 
         {tab === 'holidays' && (

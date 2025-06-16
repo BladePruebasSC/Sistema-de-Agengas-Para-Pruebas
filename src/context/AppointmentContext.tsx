@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { Appointment, Holiday, BlockedTime, Barber, BusinessHours, BarberSchedule, AdminSettings } from '../types';
+import { Appointment, Holiday, BlockedTime, Barber, BusinessHours, BarberSchedule, AdminSettings, Review, CreateReviewData } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../services/whatsappService';
@@ -14,6 +14,7 @@ interface AppointmentContextType {
   businessHours: BusinessHours[];
   barberSchedules: BarberSchedule[];
   adminSettings: AdminSettings;
+  reviews: Review[];
   userPhone: string | null;
   setUserPhone: (phone: string) => void;
   cancelAppointment: (id: string) => Promise<void>;
@@ -39,6 +40,12 @@ interface AppointmentContextType {
   updateBarberSchedule: (barberId: string, dayOfWeek: number, schedule: Partial<BarberSchedule>) => Promise<void>;
   // Función para actualizar configuración
   updateAdminSettings: (settings: Partial<AdminSettings>) => Promise<void>;
+  // Funciones para reseñas
+  createReview: (reviewData: CreateReviewData) => Promise<Review>;
+  updateReview: (id: string, reviewData: Partial<Review>) => Promise<void>;
+  deleteReview: (id: string) => Promise<void>;
+  getApprovedReviews: () => Review[];
+  getAverageRating: () => number;
 }
 
 // Genera un rango de horas en formato HH:00
@@ -106,6 +113,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([]);
   const [barberSchedules, setBarberSchedules] = useState<BarberSchedule[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [adminSettings, setAdminSettings] = useState<AdminSettings>({
     id: '',
     early_booking_restriction: false,
@@ -175,6 +183,20 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     
     return hours.map(formatHour12h);
   }, [businessHours]);
+
+  // Función para obtener reseñas aprobadas
+  const getApprovedReviews = useCallback((): Review[] => {
+    return reviews.filter(review => review.is_approved);
+  }, [reviews]);
+
+  // Función para calcular calificación promedio
+  const getAverageRating = useCallback((): number => {
+    const approvedReviews = getApprovedReviews();
+    if (approvedReviews.length === 0) return 0;
+    
+    const totalRating = approvedReviews.reduce((sum, review) => sum + review.rating, 0);
+    return Math.round((totalRating / approvedReviews.length) * 10) / 10;
+  }, [getApprovedReviews]);
 
   const fetchAppointments = async () => {
     try {
@@ -270,6 +292,22 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+  const fetchReviews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select(`
+          *,
+          barber:barbers(id, name)
+        `)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setReviews(data || []);
+    } catch (error) {
+      toast.error('Error al cargar las reseñas');
+    }
+  };
+
   useEffect(() => {
     const initializeData = async () => {
       await loadAdminSettings();
@@ -279,7 +317,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         fetchBlockedTimes(),
         fetchBarbers(),
         fetchBusinessHours(),
-        fetchBarberSchedules()
+        fetchBarberSchedules(),
+        fetchReviews()
       ]);
     };
     
@@ -389,30 +428,31 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
       const formattedDate = formatDateForSupabase(appointmentData.date);
       
-      // Si no se especifica barbero y hay múltiples barberos habilitados, usar el por defecto
-      let barberId = appointmentData.barberId;
-      if (!barberId && adminSettings.default_barber_id) {
-        barberId = adminSettings.default_barber_id;
-      }
+      // Usar el barberId que viene en appointmentData, no el por defecto
+      const barberId = appointmentData.barber_id || appointmentData.barberId || adminSettings.default_barber_id;
       
       const { data: newAppointment, error } = await supabase
         .from('appointments')
         .insert([{ 
-          ...appointmentData, 
           date: formattedDate,
+          time: appointmentData.time,
+          clientName: appointmentData.clientName,
+          clientPhone: appointmentData.clientPhone,
+          service: appointmentData.service,
+          confirmed: appointmentData.confirmed,
           barber_id: barberId,
           cancelled: false
         }])
         .select(`
           *,
-          barber:barbers(id, name)
+          barber:barbers(id, name, phone)
         `)
         .single();
       if (error) throw new Error('Error al crear la cita en la base de datos');
       
       try {
-        // Obtener el teléfono del barbero para la notificación
-        const barber = barbers.find(b => b.id === barberId);
+        // Obtener el barbero para la notificación
+        const barber = barbers.find(b => b.id === barberId) || newAppointment.barber;
         const barberPhone = barber?.phone || '+18092033894';
         
         // Enviar notificaciones por WhatsApp Web
@@ -466,7 +506,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       
       try {
         // Obtener el barbero para la notificación
-        const barber = barbers.find(b => b.id === appointmentToCancel.barberId);
+        const barber = barbers.find(b => b.id === appointmentToCancel.barber_id);
         const barberPhone = barber?.phone || '+18092033894';
         
         // Enviar notificaciones de cancelación por WhatsApp Web
@@ -666,6 +706,57 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+  // Funciones para reseñas
+  const createReview = async (reviewData: CreateReviewData): Promise<Review> => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert([reviewData])
+        .select(`
+          *,
+          barber:barbers(id, name)
+        `)
+        .single();
+      if (error) throw error;
+      setReviews(prev => [data, ...prev]);
+      toast.success('Reseña enviada exitosamente');
+      return data;
+    } catch (error) {
+      toast.error('Error al enviar la reseña');
+      throw error;
+    }
+  };
+
+  const updateReview = async (id: string, reviewData: Partial<Review>): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('reviews')
+        .update({
+          ...reviewData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      if (error) throw error;
+      setReviews(prev => prev.map(r => r.id === id ? { ...r, ...reviewData } : r));
+      toast.success('Reseña actualizada exitosamente');
+    } catch (error) {
+      toast.error('Error al actualizar la reseña');
+      throw error;
+    }
+  };
+
+  const deleteReview = async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase.from('reviews').delete().eq('id', id);
+      if (error) throw error;
+      setReviews(prev => prev.filter(r => r.id !== id));
+      toast.success('Reseña eliminada exitosamente');
+    } catch (error) {
+      toast.error('Error al eliminar la reseña');
+      throw error;
+    }
+  };
+
   const handleSetUserPhone = (phone: string) => {
     setUserPhone(phone);
     localStorage.setItem('userPhone', phone);
@@ -679,6 +770,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     businessHours,
     barberSchedules,
     adminSettings,
+    reviews,
     userPhone,
     setUserPhone: handleSetUserPhone,
     cancelAppointment,
@@ -700,6 +792,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     updateBusinessHours,
     updateBarberSchedule,
     updateAdminSettings,
+    createReview,
+    updateReview,
+    deleteReview,
+    getApprovedReviews,
+    getAverageRating,
   };
 
   return (

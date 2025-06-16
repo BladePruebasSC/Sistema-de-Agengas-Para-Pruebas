@@ -1,5 +1,5 @@
 import React from 'react';
-import { Scissors, Calendar, User, Settings } from 'lucide-react';
+import { Scissors, Calendar, User, Settings, Star } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const Header: React.FC = () => {
@@ -23,6 +23,11 @@ const Header: React.FC = () => {
             <NavLink to="/appointments" current={location.pathname === "/appointments"}>
               <User className="h-5 w-5 mr-1" />
               <span>Mis Citas</span>
+            </NavLink>
+            
+            <NavLink to="/reviews" current={location.pathname === "/reviews"}>
+              <Star className="h-5 w-5 mr-1" />
+              <span>Reseñas</span>
             </NavLink>
             
             <NavLink to="/admin" current={location.pathname.startsWith("/admin")}>
