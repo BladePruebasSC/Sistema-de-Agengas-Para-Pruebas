@@ -9,13 +9,14 @@ import {
   Award,
   Activity,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  User
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, addMonths, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
 import { services } from '../../utils/mockData';
-import { isSameDate, isDateBefore } from '../../utils/dateUtils';
+import { isSameDate, isDateBefore, isFutureDate } from '../../utils/dateUtils';
 
 interface MonthlyStats {
   month: string;
@@ -37,8 +38,9 @@ interface HourStats {
 }
 
 const StatisticsPanel: React.FC = () => {
-  const { appointments } = useAppointments();
+  const { appointments, barbers, adminSettings } = useAppointments();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
   const [serviceStats, setServiceStats] = useState<ServiceStats[]>([]);
   const [hourStats, setHourStats] = useState<HourStats[]>([]);
@@ -53,11 +55,20 @@ const StatisticsPanel: React.FC = () => {
 
   useEffect(() => {
     calculateStatistics();
-  }, [appointments, selectedMonth]);
+  }, [appointments, selectedMonth, selectedBarberId]);
+
+  const getFilteredAppointments = () => {
+    let filtered = appointments.filter(app => !app.cancelled);
+    
+    if (selectedBarberId) {
+      filtered = filtered.filter(app => app.barber_id === selectedBarberId);
+    }
+    
+    return filtered;
+  };
 
   const calculateStatistics = () => {
-    // Filtrar solo citas NO canceladas para estadísticas
-    const activeAppointments = appointments.filter(app => !app.cancelled);
+    const activeAppointments = getFilteredAppointments();
 
     // Estadísticas de los últimos 6 meses
     const last6Months = Array.from({ length: 6 }, (_, i) => {
@@ -167,6 +178,11 @@ const StatisticsPanel: React.FC = () => {
     }
   };
 
+  const getBarberName = (barberId: string) => {
+    const barber = barbers.find(b => b.id === barberId);
+    return barber?.name || 'Barbero desconocido';
+  };
+
   const StatCard: React.FC<{
     title: string;
     value: string | number;
@@ -174,16 +190,16 @@ const StatisticsPanel: React.FC = () => {
     color: string;
     subtitle?: string;
   }> = ({ title, value, icon, color, subtitle }) => (
-    <div className="bg-white rounded-lg shadow-md p-6 border-l-4" style={{ borderLeftColor: color }}>
+    <div className="bg-white rounded-lg shadow-md p-4 lg:p-6 border-l-4" style={{ borderLeftColor: color }}>
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+        <div className="min-w-0 flex-1">
+          <p className="text-xs lg:text-sm font-medium text-gray-600 truncate">{title}</p>
+          <p className="text-lg lg:text-2xl font-bold text-gray-900 truncate">{value}</p>
+          {subtitle && <p className="text-xs text-gray-500 mt-1 truncate">{subtitle}</p>}
         </div>
-        <div className="p-3 rounded-full" style={{ backgroundColor: `${color}20` }}>
+        <div className="flex-shrink-0 p-2 lg:p-3 rounded-full" style={{ backgroundColor: `${color}20` }}>
           {React.cloneElement(icon as React.ReactElement, { 
-            className: "h-6 w-6",
+            className: "h-4 w-4 lg:h-6 lg:w-6",
             style: { color }
           })}
         </div>
@@ -192,41 +208,69 @@ const StatisticsPanel: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold flex items-center">
-          <BarChart3 className="h-6 w-6 text-red-600 mr-2" />
+    <div className="space-y-4 lg:space-y-6">
+      {/* Header con controles */}
+      <div className="flex flex-col space-y-4 lg:space-y-0 lg:flex-row lg:items-center lg:justify-between">
+        <h2 className="text-xl lg:text-2xl font-semibold flex items-center">
+          <BarChart3 className="h-5 w-5 lg:h-6 lg:w-6 text-red-600 mr-2" />
           Estadísticas
         </h2>
         
-        {/* Navegador de mes mejorado */}
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => navigateMonth('prev')}
-            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
-            title="Mes anterior"
-          >
-            <ChevronLeft className="h-5 w-5 text-gray-600" />
-          </button>
+        {/* Controles */}
+        <div className="flex flex-col space-y-3 lg:space-y-0 lg:flex-row lg:items-center lg:space-x-4">
+          {/* Selector de barbero */}
+          {adminSettings.multiple_barbers_enabled && (
+            <div className="flex items-center space-x-2">
+              <User className="h-4 w-4 text-gray-600" />
+              <select
+                value={selectedBarberId || ''}
+                onChange={(e) => setSelectedBarberId(e.target.value || null)}
+                className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="">Todos los barberos</option>
+                {barbers.map(barber => (
+                  <option key={barber.id} value={barber.id}>
+                    {barber.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           
-          <div className="text-center min-w-[140px]">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {format(selectedMonth, 'MMMM yyyy', { locale: es })}
-            </h3>
+          {/* Navegador de mes */}
+          <div className="flex items-center space-x-2 lg:space-x-4">
+            <button
+              onClick={() => navigateMonth('prev')}
+              className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+              title="Mes anterior"
+            >
+              <ChevronLeft className="h-4 w-4 lg:h-5 lg:w-5 text-gray-600" />
+            </button>
+            
+            <div className="text-center min-w-[120px] lg:min-w-[140px]">
+              <h3 className="text-sm lg:text-lg font-semibold text-gray-900">
+                {format(selectedMonth, 'MMM yyyy', { locale: es })}
+              </h3>
+              {selectedBarberId && (
+                <p className="text-xs text-gray-600">
+                  {getBarberName(selectedBarberId)}
+                </p>
+              )}
+            </div>
+            
+            <button
+              onClick={() => navigateMonth('next')}
+              className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+              title="Mes siguiente"
+            >
+              <ChevronRight className="h-4 w-4 lg:h-5 lg:w-5 text-gray-600" />
+            </button>
           </div>
-          
-          <button
-            onClick={() => navigateMonth('next')}
-            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
-            title="Mes siguiente"
-          >
-            <ChevronRight className="h-5 w-5 text-gray-600" />
-          </button>
         </div>
       </div>
 
       {/* Tarjetas de estadísticas principales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
         <StatCard
           title="Citas del Mes"
           value={currentMonthStats.totalAppointments}
@@ -259,28 +303,32 @@ const StatisticsPanel: React.FC = () => {
       </div>
 
       {/* Gráfico de tendencia mensual */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-medium mb-4 flex items-center">
-          <TrendingUp className="h-5 w-5 text-blue-600 mr-2" />
+      <div className="bg-white rounded-lg shadow-md p-4 lg:p-6">
+        <h3 className="text-base lg:text-lg font-medium mb-4 flex items-center">
+          <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5 text-blue-600 mr-2" />
           Tendencia de los Últimos 6 Meses
         </h3>
         
-        <div className="space-y-4">
+        <div className="space-y-3 lg:space-y-4">
           {monthlyStats.map((stat, index) => (
             <div key={stat.month} className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <span className="text-sm font-medium text-gray-700 w-20">{stat.month}</span>
-                <div className="flex-1 bg-gray-200 rounded-full h-3 w-48">
+              <div className="flex items-center space-x-2 lg:space-x-3 min-w-0 flex-1">
+                <span className="text-xs lg:text-sm font-medium text-gray-700 w-16 lg:w-20 flex-shrink-0">
+                  {stat.month}
+                </span>
+                <div className="flex-1 bg-gray-200 rounded-full h-2 lg:h-3 max-w-32 lg:max-w-48">
                   <div
-                    className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                    className="bg-blue-600 h-2 lg:h-3 rounded-full transition-all duration-300"
                     style={{
                       width: `${Math.max((stat.appointments / Math.max(...monthlyStats.map(s => s.appointments))) * 100, 5)}%`
                     }}
                   ></div>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="text-sm font-medium text-gray-900">{stat.appointments} citas</span>
+              <div className="text-right flex-shrink-0 ml-2">
+                <span className="text-xs lg:text-sm font-medium text-gray-900 block">
+                  {stat.appointments} citas
+                </span>
                 <p className="text-xs text-gray-500">${stat.revenue.toLocaleString()}</p>
               </div>
             </div>
@@ -288,25 +336,29 @@ const StatisticsPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Estadísticas por servicio */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-medium mb-4 flex items-center">
-            <Users className="h-5 w-5 text-green-600 mr-2" />
+        <div className="bg-white rounded-lg shadow-md p-4 lg:p-6">
+          <h3 className="text-base lg:text-lg font-medium mb-4 flex items-center">
+            <Users className="h-4 w-4 lg:h-5 lg:w-5 text-green-600 mr-2" />
             Servicios Más Solicitados
           </h3>
           
-          <div className="space-y-3">
+          <div className="space-y-2 lg:space-y-3">
             {serviceStats.slice(0, 5).map((service, index) => (
               <div key={service.serviceName} className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <span className="flex items-center justify-center w-6 h-6 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                <div className="flex items-center space-x-2 lg:space-x-3 min-w-0 flex-1">
+                  <span className="flex items-center justify-center w-5 h-5 lg:w-6 lg:h-6 bg-green-100 text-green-800 text-xs font-medium rounded-full flex-shrink-0">
                     {index + 1}
                   </span>
-                  <span className="text-sm font-medium text-gray-700">{service.serviceName}</span>
+                  <span className="text-xs lg:text-sm font-medium text-gray-700 truncate">
+                    {service.serviceName}
+                  </span>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm font-medium text-gray-900">{service.count} citas</span>
+                <div className="text-right flex-shrink-0 ml-2">
+                  <span className="text-xs lg:text-sm font-medium text-gray-900 block">
+                    {service.count} citas
+                  </span>
                   <p className="text-xs text-gray-500">{service.percentage.toFixed(1)}%</p>
                 </div>
               </div>
@@ -315,23 +367,27 @@ const StatisticsPanel: React.FC = () => {
         </div>
 
         {/* Estadísticas por horario */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-medium mb-4 flex items-center">
-            <Clock className="h-5 w-5 text-orange-600 mr-2" />
+        <div className="bg-white rounded-lg shadow-md p-4 lg:p-6">
+          <h3 className="text-base lg:text-lg font-medium mb-4 flex items-center">
+            <Clock className="h-4 w-4 lg:h-5 lg:w-5 text-orange-600 mr-2" />
             Horarios Más Populares
           </h3>
           
-          <div className="space-y-3">
+          <div className="space-y-2 lg:space-y-3">
             {hourStats.slice(0, 5).map((hour, index) => (
               <div key={hour.hour} className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <span className="flex items-center justify-center w-6 h-6 bg-orange-100 text-orange-800 text-xs font-medium rounded-full">
+                <div className="flex items-center space-x-2 lg:space-x-3 min-w-0 flex-1">
+                  <span className="flex items-center justify-center w-5 h-5 lg:w-6 lg:h-6 bg-orange-100 text-orange-800 text-xs font-medium rounded-full flex-shrink-0">
                     {index + 1}
                   </span>
-                  <span className="text-sm font-medium text-gray-700">{hour.hour}</span>
+                  <span className="text-xs lg:text-sm font-medium text-gray-700">
+                    {hour.hour}
+                  </span>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm font-medium text-gray-900">{hour.count} citas</span>
+                <div className="text-right flex-shrink-0 ml-2">
+                  <span className="text-xs lg:text-sm font-medium text-gray-900 block">
+                    {hour.count} citas
+                  </span>
                   <p className="text-xs text-gray-500">{hour.percentage.toFixed(1)}%</p>
                 </div>
               </div>
@@ -341,9 +397,9 @@ const StatisticsPanel: React.FC = () => {
       </div>
 
       {/* Resumen de ingresos por servicio */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-medium mb-4 flex items-center">
-          <DollarSign className="h-5 w-5 text-green-600 mr-2" />
+      <div className="bg-white rounded-lg shadow-md p-4 lg:p-6">
+        <h3 className="text-base lg:text-lg font-medium mb-4 flex items-center">
+          <DollarSign className="h-4 w-4 lg:h-5 lg:w-5 text-green-600 mr-2" />
           Ingresos por Servicio - {format(selectedMonth, 'MMMM yyyy', { locale: es })}
         </h3>
         
@@ -351,19 +407,35 @@ const StatisticsPanel: React.FC = () => {
           <table className="min-w-full">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="text-left py-2 px-4 font-medium text-gray-700">Servicio</th>
-                <th className="text-center py-2 px-4 font-medium text-gray-700">Cantidad</th>
-                <th className="text-center py-2 px-4 font-medium text-gray-700">Ingresos</th>
-                <th className="text-center py-2 px-4 font-medium text-gray-700">% del Total</th>
+                <th className="text-left py-2 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">
+                  Servicio
+                </th>
+                <th className="text-center py-2 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">
+                  Cantidad
+                </th>
+                <th className="text-center py-2 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">
+                  Ingresos
+                </th>
+                <th className="text-center py-2 px-2 lg:px-4 font-medium text-gray-700 text-xs lg:text-sm">
+                  % del Total
+                </th>
               </tr>
             </thead>
             <tbody>
               {serviceStats.map((service) => (
                 <tr key={service.serviceName} className="border-b border-gray-100">
-                  <td className="py-2 px-4 text-sm text-gray-900">{service.serviceName}</td>
-                  <td className="py-2 px-4 text-sm text-gray-900 text-center">{service.count}</td>
-                  <td className="py-2 px-4 text-sm text-gray-900 text-center">${service.revenue.toLocaleString()}</td>
-                  <td className="py-2 px-4 text-sm text-gray-900 text-center">{service.percentage.toFixed(1)}%</td>
+                  <td className="py-2 px-2 lg:px-4 text-xs lg:text-sm text-gray-900">
+                    {service.serviceName}
+                  </td>
+                  <td className="py-2 px-2 lg:px-4 text-xs lg:text-sm text-gray-900 text-center">
+                    {service.count}
+                  </td>
+                  <td className="py-2 px-2 lg:px-4 text-xs lg:text-sm text-gray-900 text-center">
+                    ${service.revenue.toLocaleString()}
+                  </td>
+                  <td className="py-2 px-2 lg:px-4 text-xs lg:text-sm text-gray-900 text-center">
+                    {service.percentage.toFixed(1)}%
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -371,9 +443,10 @@ const StatisticsPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-800">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 lg:p-4">
+        <p className="text-xs lg:text-sm text-blue-800">
           <strong>Nota:</strong> Las estadísticas incluyen solo las citas activas (no canceladas) para un análisis preciso del negocio.
+          {selectedBarberId && ` Mostrando datos específicos para ${getBarberName(selectedBarberId)}.`}
         </p>
       </div>
     </div>

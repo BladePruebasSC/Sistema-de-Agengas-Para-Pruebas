@@ -81,6 +81,7 @@ export interface AdminSettings {
   restricted_hours: string[];
   multiple_barbers_enabled: boolean;
   default_barber_id?: string;
+  reviews_enabled?: boolean; // Nueva propiedad para controlar reseñas
   created_at: string;
   updated_at: string;
 }

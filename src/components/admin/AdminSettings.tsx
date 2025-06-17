@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Save, Settings as SettingsIcon, Users, Calendar, Phone, Plus, Trash2, Edit } from 'lucide-react';
+import { Clock, Save, Settings as SettingsIcon, Users, Calendar, Phone, Plus, Trash2, Edit, Star } from 'lucide-react';
 import { useAppointments } from '../../context/AppointmentContext';
 import toast from 'react-hot-toast';
 
@@ -34,7 +34,8 @@ const AdminSettings: React.FC = () => {
     early_booking_hours: 12,
     restricted_hours: ['7:00 AM', '8:00 AM'],
     multiple_barbers_enabled: false,
-    default_barber_id: ''
+    default_barber_id: '',
+    reviews_enabled: true
   });
 
   // Estados para horarios de negocio
@@ -58,7 +59,8 @@ const AdminSettings: React.FC = () => {
         early_booking_hours: adminSettings.early_booking_hours,
         restricted_hours: adminSettings.restricted_hours || ['7:00 AM', '8:00 AM'],
         multiple_barbers_enabled: adminSettings.multiple_barbers_enabled,
-        default_barber_id: adminSettings.default_barber_id || ''
+        default_barber_id: adminSettings.default_barber_id || '',
+        reviews_enabled: adminSettings.reviews_enabled !== false // Por defecto true
       });
     }
   }, [adminSettings]);
@@ -208,6 +210,40 @@ const AdminSettings: React.FC = () => {
       {/* Configuración General */}
       {activeTab === 'general' && (
         <div className="space-y-6">
+          {/* Sistema de reseñas */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <Star className="h-5 w-5 text-yellow-500 mt-1" />
+              <div className="flex-1">
+                <h3 className="text-lg font-medium mb-2">Sistema de Reseñas</h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  Controla si los clientes pueden dejar reseñas y calificaciones.
+                </p>
+                
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={generalSettings.reviews_enabled}
+                    onChange={(e) => setGeneralSettings({
+                      ...generalSettings,
+                      reviews_enabled: e.target.checked
+                    })}
+                    className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                  />
+                  <span className="ml-2 text-sm font-medium">
+                    Habilitar sistema de reseñas
+                  </span>
+                </label>
+                
+                {!generalSettings.reviews_enabled && (
+                  <p className="text-sm text-orange-600 mt-2">
+                    Las reseñas existentes seguirán siendo visibles, pero no se podrán crear nuevas.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Múltiples barberos */}
           <div className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-start space-x-3">

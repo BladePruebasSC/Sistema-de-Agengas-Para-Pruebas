@@ -25,7 +25,7 @@ interface AppointmentContextType {
   removeBlockedTime: (id: string) => Promise<void>;
   isTimeSlotAvailable: (date: Date, time: string, barberId?: string) => Promise<boolean>;
   getDayAvailability: (date: Date, barberId?: string) => Promise<{ [hour: string]: boolean }>;
-  getAvailableHoursForDate: (date: Date) => string[];
+  getAvailableHoursForDate: (date: Date, barberId?: string) => string[];
   formatHour12h: (hour24: string) => string;
   loadAdminSettings: () => Promise<void>;
   getFutureAppointments: () => Appointment[];
@@ -120,6 +120,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     early_booking_hours: 12,
     restricted_hours: ['7:00 AM', '8:00 AM'],
     multiple_barbers_enabled: false,
+    reviews_enabled: true,
     created_at: '',
     updated_at: ''
   });
@@ -158,9 +159,42 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     return appointments.filter(appointment => !appointment.cancelled);
   }, [appointments]);
 
-  // Función para obtener horarios disponibles según configuración
-  const getAvailableHoursForDate = useCallback((date: Date): string[] => {
+  // Función para obtener horarios disponibles según configuración (con soporte para barberos específicos)
+  const getAvailableHoursForDate = useCallback((date: Date, barberId?: string): string[] => {
     const dayOfWeek = date.getDay();
+    
+    // Si hay barberId específico y horarios de barbero habilitados, usar horarios del barbero
+    if (barberId && adminSettings.multiple_barbers_enabled) {
+      const barberSchedule = barberSchedules.find(bs => 
+        bs.barber_id === barberId && bs.day_of_week === dayOfWeek
+      );
+      
+      if (barberSchedule && !barberSchedule.is_available) {
+        return []; // Barbero no disponible este día
+      }
+      
+      if (barberSchedule) {
+        const hours: string[] = [];
+        
+        // Horarios de mañana del barbero
+        if (barberSchedule.morning_start && barberSchedule.morning_end) {
+          const startHour = parseInt(barberSchedule.morning_start.split(':')[0]);
+          const endHour = parseInt(barberSchedule.morning_end.split(':')[0]);
+          hours.push(...generateHoursRange(startHour, endHour - 1));
+        }
+        
+        // Horarios de tarde del barbero
+        if (barberSchedule.afternoon_start && barberSchedule.afternoon_end) {
+          const startHour = parseInt(barberSchedule.afternoon_start.split(':')[0]);
+          const endHour = parseInt(barberSchedule.afternoon_end.split(':')[0]);
+          hours.push(...generateHoursRange(startHour, endHour - 1));
+        }
+        
+        return hours.map(formatHour12h);
+      }
+    }
+    
+    // Usar horarios generales del negocio
     const dayHours = businessHours.find(bh => bh.day_of_week === dayOfWeek);
     
     if (!dayHours || !dayHours.is_open) return [];
@@ -182,7 +216,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
     
     return hours.map(formatHour12h);
-  }, [businessHours]);
+  }, [businessHours, barberSchedules, adminSettings.multiple_barbers_enabled]);
 
   // Función para obtener reseñas aprobadas
   const getApprovedReviews = useCallback((): Review[] => {
@@ -377,7 +411,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const getDayAvailability = useCallback(async (date: Date, barberId?: string) => {
     const formattedDate = formatDateForSupabase(date);
-    const hours = getAvailableHoursForDate(date);
+    const hours = getAvailableHoursForDate(date, barberId);
     if (hours.length === 0) return {};
 
     const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([

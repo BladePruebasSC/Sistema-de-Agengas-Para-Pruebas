@@ -1,9 +1,11 @@
 import React from 'react';
 import { Scissors, Calendar, User, Settings, Star } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAppointments } from '../context/AppointmentContext';
 
 const Header: React.FC = () => {
   const location = useLocation();
+  const { adminSettings } = useAppointments();
   
   return (
     <header className="bg-gray-900 text-white shadow-md">
@@ -25,10 +27,13 @@ const Header: React.FC = () => {
               <span>Mis Citas</span>
             </NavLink>
             
-            <NavLink to="/reviews" current={location.pathname === "/reviews"}>
-              <Star className="h-5 w-5 mr-1" />
-              <span>Reseñas</span>
-            </NavLink>
+            {/* Solo mostrar reseñas si están habilitadas */}
+            {adminSettings.reviews_enabled !== false && (
+              <NavLink to="/reviews" current={location.pathname === "/reviews"}>
+                <Star className="h-5 w-5 mr-1" />
+                <span>Reseñas</span>
+              </NavLink>
+            )}
             
             <NavLink to="/admin" current={location.pathname.startsWith("/admin")}>
               <Settings className="h-5 w-5 mr-1" />

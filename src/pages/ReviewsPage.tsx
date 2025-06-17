@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Star, MessageSquare, Plus } from 'lucide-react';
 import ReviewsList from '../components/reviews/ReviewsList';
 import ReviewForm from '../components/reviews/ReviewForm';
+import { useAppointments } from '../context/AppointmentContext';
 
 const ReviewsPage: React.FC = () => {
+  const { adminSettings } = useAppointments();
   const [showForm, setShowForm] = useState(false);
 
   const handleFormSuccess = () => {
@@ -13,6 +15,21 @@ const ReviewsPage: React.FC = () => {
   const handleFormCancel = () => {
     setShowForm(false);
   };
+
+  // Si las reseñas están deshabilitadas, mostrar mensaje
+  if (adminSettings.reviews_enabled === false) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <Star className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Sistema de Reseñas No Disponible</h1>
+          <p className="text-gray-600">
+            El sistema de reseñas está temporalmente deshabilitado.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
