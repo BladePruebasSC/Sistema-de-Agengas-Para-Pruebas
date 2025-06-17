@@ -503,52 +503,59 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
       const formattedDate = formatDateForSupabase(appointmentData.date);
       
-      // Usar el barberId que viene en appointmentData, no el por defecto
       let determinedBarberId = appointmentData.barber_id || appointmentData.barberId;
 
-      if (!determinedBarberId || determinedBarberId.trim() === "") {
-        if (adminSettings.default_barber_id && adminSettings.default_barber_id.trim() !== "") {
+      // Check if the initially determinedBarberId is a string with actual content.
+      // A "valid ID string" means it's a string and not empty after trimming.
+      let isValidIdString = typeof determinedBarberId === 'string' && determinedBarberId.trim() !== "";
+
+      if (!isValidIdString) {
+        // If appointmentData didn't provide a valid ID, try the default admin setting.
+        if (typeof adminSettings.default_barber_id === 'string' && adminSettings.default_barber_id.trim() !== "") {
           determinedBarberId = adminSettings.default_barber_id;
+          // Re-check if this default ID is valid (it should be, given the condition above)
+          isValidIdString = true;
         } else {
+          // No valid ID from appointmentData, and no valid default_barber_id either.
+          // This is an error condition.
           if (adminSettings.multiple_barbers_enabled) {
-            console.error("Error: No barber ID provided or found, and multiple barbers are enabled without a default.");
-            throw new Error('No se pudo determinar un barbero para la cita. Por favor, revise la configuración o la selección.');
+            console.error("Error: No barber ID provided in appointmentData, and no valid default_barber_id is set, while multiple barbers are enabled.");
+            throw new Error('No se pudo determinar un barbero para la cita. Por favor, seleccione un barbero o configure un barbero por defecto.');
           } else {
-            console.error("Error: default_barber_id is not set in single barber mode.");
-            throw new Error('Error de configuración: El barbero por defecto no está configurado.');
+            // Single barber mode, but default_barber_id is missing or invalid.
+            console.error("Error: default_barber_id is not set or is invalid in single barber mode.");
+            throw new Error('Error de configuración: El barbero por defecto no está configurado o es inválido.');
           }
         }
       }
 
-      // Ensure determinedBarberId is not an empty string if it somehow passed previous checks
-      if (determinedBarberId && determinedBarberId.trim() === "") {
-          if (adminSettings.default_barber_id && adminSettings.default_barber_id.trim() !== "") {
-              determinedBarberId = adminSettings.default_barber_id;
-          } else {
-              // This path should ideally not be reached if the above logic is correct and adminSettings are sound.
-              console.error("Error: Barber ID resolved to an empty string with no valid default available.");
-              throw new Error('No se pudo asignar un barbero válido a la cita. Verifique la configuración del barbero por defecto.');
-          }
+      // Final check: After attempting to use appointmentData and default_barber_id,
+      // determinedBarberId MUST be a non-empty string.
+      // Re-evaluate isValidIdString in case determinedBarberId was updated from default.
+      isValidIdString = typeof determinedBarberId === 'string' && determinedBarberId.trim() !== "";
+
+      if (!isValidIdString) {
+        // This should theoretically not be reached if the logic above is correct and throws errors appropriately.
+        // However, as a safeguard:
+        console.error("Critical Error: determinedBarberId is still not a valid non-empty string after all checks.");
+        throw new Error('Error crítico inesperado al determinar el barbero para la cita.');
       }
 
-      // Ensure that if determinedBarberId ended up as undefined, and there's a default_barber_id, use the default.
-      // This handles cases where barber_id might be explicitly passed as undefined.
-      if (determinedBarberId === undefined && adminSettings.default_barber_id && adminSettings.default_barber_id.trim() !== "") {
-        determinedBarberId = adminSettings.default_barber_id;
+      // Ensure determinedBarberId is the trimmed version if it's a string
+      if (typeof determinedBarberId === 'string') {
+        determinedBarberId = determinedBarberId.trim();
       }
 
-      // Final check: if after all this, determinedBarberId is still not a valid string, and multiple barbers are not enabled,
-      // it's a fundamental issue with default_barber_id.
-      if ((!determinedBarberId || determinedBarberId.trim() === "") && !adminSettings.multiple_barbers_enabled) {
-          console.error("Critical Error: default_barber_id is essential in single barber mode and is missing or invalid.");
-          throw new Error('Error crítico de configuración: El barbero por defecto es inválido o no está configurado.');
-      }
-
-      // If multiple barbers are enabled and determinedBarberId is still empty, it's an error.
-      if ((!determinedBarberId || determinedBarberId.trim() === "") && adminSettings.multiple_barbers_enabled) {
-          console.error("Critical Error: A barber must be selected or a valid default barber must exist in multiple barber mode.");
-          throw new Error('Error crítico: Se debe seleccionar un barbero o existir un barbero por defecto válido.');
-      }
+      console.log('Attempting to create appointment with data:', {
+        date: formattedDate,
+        time: appointmentData.time,
+        clientName: appointmentData.clientName,
+        clientPhone: appointmentData.clientPhone,
+        service: appointmentData.service,
+        confirmed: appointmentData.confirmed,
+        barber_id: determinedBarberId, // Log the actual value being sent
+        cancelled: false
+      });
       
       const { data: newAppointment, error } = await supabase
         .from('appointments')
@@ -567,7 +574,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           barber:barbers(id, name, phone)
         `)
         .single();
-      if (error) throw new Error('Error al crear la cita en la base de datos');
+      if (error) {
+        console.error('Supabase error creating appointment:', error); // Log the full Supabase error
+        throw new Error(`Error al crear la cita en la base de datos: ${error.message}`); // Include Supabase message
+      }
       
       try {
         // Obtener el barbero para la notificación
