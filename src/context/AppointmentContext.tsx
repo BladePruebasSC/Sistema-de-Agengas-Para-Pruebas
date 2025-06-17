@@ -46,6 +46,11 @@ interface AppointmentContextType {
   deleteReview: (id: string) => Promise<void>;
   getApprovedReviews: () => Review[];
   getAverageRating: () => number;
+  // Barber Access Key Auth
+  loggedInBarber: Barber | null;
+  verifyBarberAccessKey: (accessKey: string) => Promise<Barber | null>;
+  logoutBarber: () => void;
+  getAppointmentsForBarber: (barberId: string) => Appointment[];
 }
 
 // Genera un rango de horas en formato HH:00
@@ -125,6 +130,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     updated_at: ''
   });
   const [userPhone, setUserPhone] = useState<string | null>(() => localStorage.getItem('userPhone'));
+  const [loggedInBarber, setLoggedInBarber] = useState<Barber | null>(null);
 
   // Función para cargar configuración de admin
   const loadAdminSettings = async () => {
@@ -256,7 +262,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     try {
       const { data, error } = await supabase
         .from('holidays')
-        .select('*')
+        .select('*, barber_id') // Ensure barber_id is selected
         .order('date', { ascending: true });
       if (error) throw error;
       const formattedHolidays = data.map(holiday => ({
@@ -368,13 +374,31 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
       const formattedDate = formatDateForSupabase(date);
       
-      // Verificar feriados
-      const { data: holidaysData } = await supabase
+      // Verify holidays considering barber_id
+      let holidayQueryBuilder = supabase
         .from('holidays')
-        .select('id')
+        .select('id, barber_id')
         .eq('date', formattedDate);
-      
-      if (holidaysData && holidaysData.length > 0) return false;
+
+      const { data: holidaysOnDate, error: holidaysError } = await holidayQueryBuilder;
+
+      if (holidaysError) {
+        console.error("Error fetching holidays in isTimeSlotAvailable:", holidaysError);
+        return false; // Fail safe, assume unavailable if error
+      }
+
+      if (holidaysOnDate && holidaysOnDate.length > 0) {
+        const isGeneralHoliday = holidaysOnDate.some(h => h.barber_id === null);
+        if (isGeneralHoliday) {
+          return false; // General holiday makes it unavailable for everyone
+        }
+        if (barberId) {
+          const isBarberSpecificHoliday = holidaysOnDate.some(h => h.barber_id === barberId);
+          if (isBarberSpecificHoliday) {
+            return false; // Specific holiday for this barber
+          }
+        }
+      }
       
       // Verificar horarios bloqueados
       const { data: blockedData } = await supabase
@@ -415,7 +439,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     if (hours.length === 0) return {};
 
     const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([
-      supabase.from('holidays').select('id').eq('date', formattedDate),
+      supabase.from('holidays').select('id, barber_id').eq('date', formattedDate), // Fetch barber_id
       supabase.from('blocked_times').select('time,timeSlots').eq('date', formattedDate),
       barberId 
         ? supabase.from('appointments').select('time').eq('date', formattedDate).eq('barber_id', barberId).eq('cancelled', false)
@@ -423,9 +447,26 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     ]);
 
     const availability: { [hour: string]: boolean } = {};
+
+    // Process holidays considering barber_id
+    let activeHolidaysForContext = false;
     if (holidaysData && holidaysData.length > 0) {
+      const isGeneralHoliday = holidaysData.some(h => h.barber_id === null);
+      if (isGeneralHoliday) {
+        activeHolidaysForContext = true;
+      } else if (barberId) { // Only check barber-specific if no general holiday
+        const isBarberSpecificHoliday = holidaysData.some(h => h.barber_id === barberId);
+        if (isBarberSpecificHoliday) {
+          activeHolidaysForContext = true;
+        }
+      }
+      // If not multiple_barbers_enabled, any holiday (even barber specific) might count as general
+      // For now, sticking to the logic: general holidays block all, specific holidays block specific barber.
+    }
+
+    if (activeHolidaysForContext) {
       hours.forEach(h => { availability[h] = false; });
-      return availability;
+      return availability; // If it's a holiday for the current context, all hours are unavailable.
     }
 
     const blockedSlots = new Set<string>();
@@ -463,7 +504,51 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       const formattedDate = formatDateForSupabase(appointmentData.date);
       
       // Usar el barberId que viene en appointmentData, no el por defecto
-      const barberId = appointmentData.barber_id || appointmentData.barberId || adminSettings.default_barber_id;
+      let determinedBarberId = appointmentData.barber_id || appointmentData.barberId;
+
+      if (!determinedBarberId || determinedBarberId.trim() === "") {
+        if (adminSettings.default_barber_id && adminSettings.default_barber_id.trim() !== "") {
+          determinedBarberId = adminSettings.default_barber_id;
+        } else {
+          if (adminSettings.multiple_barbers_enabled) {
+            console.error("Error: No barber ID provided or found, and multiple barbers are enabled without a default.");
+            throw new Error('No se pudo determinar un barbero para la cita. Por favor, revise la configuración o la selección.');
+          } else {
+            console.error("Error: default_barber_id is not set in single barber mode.");
+            throw new Error('Error de configuración: El barbero por defecto no está configurado.');
+          }
+        }
+      }
+
+      // Ensure determinedBarberId is not an empty string if it somehow passed previous checks
+      if (determinedBarberId && determinedBarberId.trim() === "") {
+          if (adminSettings.default_barber_id && adminSettings.default_barber_id.trim() !== "") {
+              determinedBarberId = adminSettings.default_barber_id;
+          } else {
+              // This path should ideally not be reached if the above logic is correct and adminSettings are sound.
+              console.error("Error: Barber ID resolved to an empty string with no valid default available.");
+              throw new Error('No se pudo asignar un barbero válido a la cita. Verifique la configuración del barbero por defecto.');
+          }
+      }
+
+      // Ensure that if determinedBarberId ended up as undefined, and there's a default_barber_id, use the default.
+      // This handles cases where barber_id might be explicitly passed as undefined.
+      if (determinedBarberId === undefined && adminSettings.default_barber_id && adminSettings.default_barber_id.trim() !== "") {
+        determinedBarberId = adminSettings.default_barber_id;
+      }
+
+      // Final check: if after all this, determinedBarberId is still not a valid string, and multiple barbers are not enabled,
+      // it's a fundamental issue with default_barber_id.
+      if ((!determinedBarberId || determinedBarberId.trim() === "") && !adminSettings.multiple_barbers_enabled) {
+          console.error("Critical Error: default_barber_id is essential in single barber mode and is missing or invalid.");
+          throw new Error('Error crítico de configuración: El barbero por defecto es inválido o no está configurado.');
+      }
+
+      // If multiple barbers are enabled and determinedBarberId is still empty, it's an error.
+      if ((!determinedBarberId || determinedBarberId.trim() === "") && adminSettings.multiple_barbers_enabled) {
+          console.error("Critical Error: A barber must be selected or a valid default barber must exist in multiple barber mode.");
+          throw new Error('Error crítico: Se debe seleccionar un barbero o existir un barbero por defecto válido.');
+      }
       
       const { data: newAppointment, error } = await supabase
         .from('appointments')
@@ -474,7 +559,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           clientPhone: appointmentData.clientPhone,
           service: appointmentData.service,
           confirmed: appointmentData.confirmed,
-          barber_id: barberId,
+          barber_id: determinedBarberId,
           cancelled: false
         }])
         .select(`
@@ -486,7 +571,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       
       try {
         // Obtener el barbero para la notificación
-        const barber = barbers.find(b => b.id === barberId) || newAppointment.barber;
+        const barber = barbers.find(b => b.id === determinedBarberId) || newAppointment.barber;
         const barberPhone = barber?.phone || '+18092033894';
         
         // Enviar notificaciones por WhatsApp Web
@@ -567,22 +652,38 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
     try {
       const formattedDate = formatDateForSupabase(holidayData.date);
-      const { data: existingHolidays, error: checkError } = await supabase
-        .from('holidays')
-        .select('*')
-        .eq('date', formattedDate);
+
+      // Revised check: Only block if it's a general holiday or the same barber-specific holiday
+      let query = supabase.from('holidays').select('id').eq('date', formattedDate);
+      if (holidayData.barber_id) {
+          query = query.eq('barber_id', holidayData.barber_id);
+      } else {
+          query = query.is('barber_id', null);
+      }
+      const { data: existingHoliday, error: checkError } = await query;
       if (checkError) throw checkError;
-      if (existingHolidays && existingHolidays.length > 0) throw new Error('Ya existe un feriado en esta fecha');
+      if (existingHoliday && existingHoliday.length > 0) {
+           throw new Error(holidayData.barber_id ? 'Este barbero ya tiene un feriado en esta fecha.' : 'Ya existe un feriado general en esta fecha.');
+      }
+
+      const insertData: any = { ...holidayData, date: formattedDate };
+      if (!insertData.barber_id) { // Ensure barber_id is null if not provided or empty
+          insertData.barber_id = null;
+      }
+
       const { data, error } = await supabase
         .from('holidays')
-        .insert([{ ...holidayData, date: formattedDate }])
-        .select()
+        .insert([insertData]) // holidayData might contain barber_id
+        .select('*, barber_id') // Ensure barber_id is selected on return
         .single();
       if (error) throw error;
+
       const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
-      setHolidays(prev => [...prev, newHoliday]);
+      setHolidays(prev => [...prev, newHoliday].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())); // Keep sorted
+      toast.success(holidayData.barber_id ? 'Feriado específico para barbero agregado.' : 'Feriado general agregado.');
       return newHoliday;
     } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al crear el feriado');
       throw error;
     }
   };
@@ -796,6 +897,60 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     localStorage.setItem('userPhone', phone);
   };
 
+  const verifyBarberAccessKey = useCallback(async (accessKey: string): Promise<Barber | null> => {
+    if (!accessKey || accessKey.trim() === '') {
+      setLoggedInBarber(null);
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('barbers')
+        .select('*')
+        .eq('access_key', accessKey.trim())
+        .eq('is_active', true) // Only allow active barbers to log in
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') { // Not found
+          toast.error('Clave de acceso incorrecta o barbero no encontrado.');
+        } else {
+          toast.error('Error al verificar la clave de acceso.');
+        }
+        console.error('Error verifying barber access key:', error);
+        setLoggedInBarber(null);
+        return null;
+      }
+
+      if (data) {
+        setLoggedInBarber(data as Barber);
+        toast.success(`Bienvenido, ${data.name}!`);
+        return data as Barber;
+      }
+      setLoggedInBarber(null); // Should be caught by PGRST116, but as a fallback
+      return null;
+    } catch (err) {
+      toast.error('Ocurrió un error inesperado.');
+      console.error('Unexpected error in verifyBarberAccessKey:', err);
+      setLoggedInBarber(null);
+      return null;
+    }
+  }, []);
+
+  const logoutBarber = useCallback(() => {
+    setLoggedInBarber(null);
+    // Potentially clear any related stored data if needed, e.g., from localStorage
+    toast.success('Sesión cerrada.');
+  }, []);
+
+  const getAppointmentsForBarber = useCallback((barberId: string): Appointment[] => {
+    const today = new Date();
+    return appointments.filter(appointment =>
+      appointment.barber_id === barberId &&
+      !appointment.cancelled &&
+      (isSameDate(appointment.date, today) || isFutureDate(appointment.date)) // Only future or today's appointments
+    ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.time.localeCompare(b.time)); // Sort by date then time
+  }, [appointments]);
+
   const value = {
     appointments,
     holidays,
@@ -831,6 +986,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     deleteReview,
     getApprovedReviews,
     getAverageRating,
+    // Barber Access Key Auth
+    loggedInBarber,
+    verifyBarberAccessKey,
+    logoutBarber,
+    getAppointmentsForBarber,
   };
 
   return (
