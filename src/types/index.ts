@@ -36,6 +36,7 @@ export interface BlockedTime {
   time: string;
   timeSlots: string[];
   reason: string;
+  barber_id?: string;
 }
 
 export interface Service {
