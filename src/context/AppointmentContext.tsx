@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { Appointment, Holiday, BlockedTime, Barber, BusinessHours, BarberSchedule, AdminSettings, Review, CreateReviewData } from '../types';
+import { Appointment, Holiday, BlockedTime, Barber, BusinessHours, BarberSchedule, AdminSettings, Review, CreateReviewData, Service } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../services/whatsappService';
@@ -15,6 +15,7 @@ interface AppointmentContextType {
   barberSchedules: BarberSchedule[];
   adminSettings: AdminSettings;
   reviews: Review[];
+  services: Service[]; // Added services
   userPhone: string | null;
   setUserPhone: (phone: string) => void;
   cancelAppointment: (id: string) => Promise<void>;
@@ -119,6 +120,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([]);
   const [barberSchedules, setBarberSchedules] = useState<BarberSchedule[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [services, setServices] = useState<Service[]>([]); // Added services state
   const [adminSettings, setAdminSettings] = useState<AdminSettings>({
     id: '',
     early_booking_restriction: false,
@@ -279,7 +281,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     try {
       const { data, error } = await supabase
         .from('blocked_times')
-        .select('*')
+        .select('*, barber_id') // Ensure barber_id is selected
         .order('date', { ascending: true });
       if (error) throw error;
       const formattedBlockedTimes = data.map(blockedTime => ({
@@ -348,6 +350,20 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+  const fetchServices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setServices(data || []);
+    } catch (error) {
+      console.error('Error fetching services:', error);
+      toast.error('Error al cargar los servicios');
+    }
+  };
+
   useEffect(() => {
     const initializeData = async () => {
       await loadAdminSettings();
@@ -358,7 +374,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         fetchBarbers(),
         fetchBusinessHours(),
         fetchBarberSchedules(),
-        fetchReviews()
+        fetchReviews(),
+        fetchServices() // Added fetchServices
       ]);
     };
     
@@ -401,15 +418,28 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
       
       // Verificar horarios bloqueados
-      const { data: blockedData } = await supabase
+      const { data: blockedData, error: blockedError } = await supabase
         .from('blocked_times')
-        .select('time,timeSlots')
+        .select('time, timeSlots, barber_id') // Fetch barber_id
         .eq('date', formattedDate);
+
+      if (blockedError) {
+        console.error("Error fetching blocked times in isTimeSlotAvailable:", blockedError);
+        return false; // Fail safe
+      }
       
-      if (blockedData && blockedData.some(block =>
-        (block.time && block.time === time) ||
-        (block.timeSlots && Array.isArray(block.timeSlots) && block.timeSlots.includes(time))
-      )) return false;
+      if (blockedData && blockedData.some(block => {
+        const isSlotMatch = (block.time && block.time === time) ||
+                           (block.timeSlots && Array.isArray(block.timeSlots) && block.timeSlots.includes(time));
+        if (!isSlotMatch) return false;
+
+        // Check if the block applies
+        if (block.barber_id === null) return true; // General block
+        if (barberId && block.barber_id === barberId) return true; // Specific block for this barber
+        return false; // Specific block for another barber
+      })) {
+        return false;
+      }
       
       // Verificar citas existentes
       let appointmentQuery = supabase
@@ -439,8 +469,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     if (hours.length === 0) return {};
 
     const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([
-      supabase.from('holidays').select('id, barber_id').eq('date', formattedDate), // Fetch barber_id
-      supabase.from('blocked_times').select('time,timeSlots').eq('date', formattedDate),
+      supabase.from('holidays').select('id, barber_id').eq('date', formattedDate),
+      supabase.from('blocked_times').select('time, timeSlots, barber_id').eq('date', formattedDate), // Fetch barber_id
       barberId 
         ? supabase.from('appointments').select('time').eq('date', formattedDate).eq('barber_id', barberId).eq('cancelled', false)
         : supabase.from('appointments').select('time').eq('date', formattedDate).eq('cancelled', false),
@@ -472,10 +502,17 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     const blockedSlots = new Set<string>();
     if (blockedData) {
       for (const block of blockedData) {
-        if (block.timeSlots && Array.isArray(block.timeSlots)) {
-          block.timeSlots.forEach((slot: string) => blockedSlots.add(slot));
+        // Check if the block applies to the current context (general or specific barber)
+        const isApplicableBlock = block.barber_id === null || (barberId && block.barber_id === barberId);
+
+        if (isApplicableBlock) {
+          if (block.timeSlots && Array.isArray(block.timeSlots)) {
+            block.timeSlots.forEach((slot: string) => blockedSlots.add(slot));
+          }
+          if (block.time) { // Ensure single 'time' entries are also added
+            blockedSlots.add(block.time);
+          }
         }
-        if (block.time) blockedSlots.add(block.time);
       }
     }
 
@@ -710,25 +747,36 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
-  const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id'>): Promise<BlockedTime> => {
+  const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id' | 'barber_id'> & { barber_id?: string }): Promise<BlockedTime> => {
     try {
       const formattedDate = formatDateForSupabase(blockedTimeData.date);
       const dataToInsert = {
         date: formattedDate,
         time: Array.isArray(blockedTimeData.timeSlots) ? blockedTimeData.timeSlots[0] : blockedTimeData.timeSlots,
         timeSlots: blockedTimeData.timeSlots,
-        reason: blockedTimeData.reason || 'Horario bloqueado'
+        reason: blockedTimeData.reason || 'Horario bloqueado',
+        barber_id: blockedTimeData.barber_id || null // Add barber_id, defaulting to null
       };
       const { data, error } = await supabase
         .from('blocked_times')
         .insert([dataToInsert])
-        .select()
+        .select('*, barber_id') // Ensure barber_id is selected
         .single();
       if (error) throw error;
+
       const newBlockedTime = { ...data, date: parseSupabaseDate(data.date) };
       setBlockedTimes(prev => [...prev, newBlockedTime]);
+
+      // Optional: Update toast message
+      const barberName = blockedTimeData.barber_id ? barbers.find(b => b.id === blockedTimeData.barber_id)?.name : null;
+      if (barberName) {
+        toast.success(`Horario bloqueado para ${barberName}`);
+      } else {
+        toast.success('Horario bloqueado (general)');
+      }
       return newBlockedTime;
     } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al crear el bloqueo de horario');
       throw error;
     }
   };
@@ -780,15 +828,34 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const deleteBarber = async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase
+      // First, delete related barber_schedules
+      const { error: scheduleError } = await supabase
+        .from('barber_schedules')
+        .delete()
+        .eq('barber_id', id);
+
+      if (scheduleError) {
+        console.error('Error deleting barber schedules:', scheduleError);
+        throw new Error(`Error al eliminar los horarios del barbero: ${scheduleError.message}`);
+      }
+
+      // Then, delete the barber
+      const { error: barberError } = await supabase
         .from('barbers')
-        .update({ is_active: false })
+        .delete()
         .eq('id', id);
-      if (error) throw error;
+
+      if (barberError) {
+        console.error('Error deleting barber:', barberError);
+        throw new Error(`Error al eliminar el barbero: ${barberError.message}`);
+      }
+
       setBarbers(prev => prev.filter(b => b.id !== id));
-      toast.success('Barbero desactivado exitosamente');
+      // Also update barberSchedules state locally if needed, though re-fetch might be simpler
+      setBarberSchedules(prev => prev.filter(bs => bs.barber_id !== id));
+      toast.success('Barbero y sus horarios eliminados exitosamente');
     } catch (error) {
-      toast.error('Error al desactivar barbero');
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar barbero');
       throw error;
     }
   };
@@ -970,6 +1037,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     barberSchedules,
     adminSettings,
     reviews,
+    services, // Added services
     userPhone,
     setUserPhone: handleSetUserPhone,
     cancelAppointment,

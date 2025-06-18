@@ -15,7 +15,7 @@ import {
 import { format, startOfMonth, endOfMonth, subMonths, addMonths, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
-import { services } from '../../utils/mockData';
+// import { services } from '../../utils/mockData'; // Removed mock data import
 import { isSameDate, isDateBefore, isFutureDate } from '../../utils/dateUtils';
 
 interface MonthlyStats {
@@ -38,7 +38,7 @@ interface HourStats {
 }
 
 const StatisticsPanel: React.FC = () => {
-  const { appointments, barbers, adminSettings } = useAppointments();
+  const { appointments, barbers, adminSettings, services } = useAppointments(); // Added services from context
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
@@ -61,7 +61,12 @@ const StatisticsPanel: React.FC = () => {
     let filtered = appointments.filter(app => !app.cancelled);
     
     if (selectedBarberId) {
-      filtered = filtered.filter(app => app.barber_id === selectedBarberId);
+      console.log(`Filtering for barber: ${selectedBarberId}. Appointments before filter:`, filtered.length);
+      const barberAppointments = filtered.filter(app => app.barber_id === selectedBarberId);
+      console.log(`Appointments after filter for barber ${selectedBarberId}:`, barberAppointments.length, barberAppointments.map(a => ({ id: a.id, barber_id: a.barber_id, date: a.date, service: a.service })));
+      filtered = barberAppointments;
+    } else {
+      console.log("No barber selected, using all non-cancelled appointments:", filtered.length);
     }
     
     return filtered;

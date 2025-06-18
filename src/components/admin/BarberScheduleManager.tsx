@@ -96,7 +96,7 @@ const BarberScheduleManager: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
+    <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6"> {/* Adjusted padding */}
       <div className="flex items-center mb-6">
         <User className="h-6 w-6 text-blue-600 mr-2" />
         <h2 className="text-xl font-semibold">Horarios por Barbero</h2>
@@ -107,11 +107,12 @@ const BarberScheduleManager: React.FC = () => {
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Seleccionar Barbero
         </label>
-        <div className="flex items-center space-x-4">
+        {/* Adjusted for responsiveness: flex-col on small, md:flex-row on medium+ */}
+        <div className="flex flex-col md:flex-row md:items-center md:space-x-4 space-y-3 md:space-y-0">
           <select
             value={selectedBarberId}
             onChange={(e) => setSelectedBarberId(e.target.value)}
-            className="block w-64 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            className="block w-full md:w-64 p-3 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" // w-full on small, md:w-64 on medium+
           >
             <option value="">Seleccionar barbero</option>
             {barbers.map(barber => (
@@ -124,7 +125,7 @@ const BarberScheduleManager: React.FC = () => {
           {selectedBarberId && (
             <button
               onClick={copyFromBusinessHours}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors text-sm"
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors text-sm w-full md:w-auto" // w-full on small, md:w-auto on medium+
             >
               Copiar horarios generales
             </button>
@@ -162,24 +163,26 @@ const BarberScheduleManager: React.FC = () => {
                     </div>
 
                     {daySchedule.is_available && (
-                      <div className="grid grid-cols-2 gap-4">
+                      // Adjusted for responsiveness: grid-cols-1 on small/medium, lg:grid-cols-2 on large+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Mañana
                           </label>
-                          <div className="flex space-x-2">
+                          {/* Time inputs container: flex-col on smallest, sm:flex-row on small+ */}
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0">
                             <input
                               type="time"
                               value={daySchedule.morning_start || '07:00'}
                               onChange={(e) => handleScheduleChange(index, 'morning_start', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // flex-1 to share space on sm+
                             />
-                            <span className="self-center text-gray-500">a</span>
+                            <span className="self-center text-gray-500 px-1 text-center sm:text-left">a</span> {/* Centered text for stacked, left for row */}
                             <input
                               type="time"
                               value={daySchedule.morning_end || '12:00'}
                               onChange={(e) => handleScheduleChange(index, 'morning_end', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // flex-1 to share space on sm+
                             />
                           </div>
                         </div>
@@ -188,19 +191,20 @@ const BarberScheduleManager: React.FC = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Tarde
                           </label>
-                          <div className="flex space-x-2">
+                          {/* Time inputs container: flex-col on smallest, sm:flex-row on small+ */}
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0">
                             <input
                               type="time"
                               value={daySchedule.afternoon_start || '15:00'}
                               onChange={(e) => handleScheduleChange(index, 'afternoon_start', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // flex-1 to share space on sm+
                             />
-                            <span className="self-center text-gray-500">a</span>
+                            <span className="self-center text-gray-500 px-1 text-center sm:text-left">a</span> {/* Centered text for stacked, left for row */}
                             <input
                               type="time"
                               value={daySchedule.afternoon_end || '21:00'}
                               onChange={(e) => handleScheduleChange(index, 'afternoon_end', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // flex-1 to share space on sm+
                             />
                           </div>
                         </div>
@@ -213,11 +217,12 @@ const BarberScheduleManager: React.FC = () => {
           </div>
 
           {/* Botón de guardar */}
-          <div className="flex justify-end">
+          {/* Adjusted for responsiveness: full width on small, auto on sm+ */}
+          <div className="flex flex-col sm:flex-row sm:justify-end mt-6">
             <button
               onClick={saveBarberSchedule}
               disabled={loading}
-              className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              className="flex items-center justify-center w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
             >
               {loading ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

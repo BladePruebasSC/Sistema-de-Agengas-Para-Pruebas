@@ -44,6 +44,7 @@ const AdminSettings: React.FC = () => {
   // Estados para barberos
   const [newBarber, setNewBarber] = useState({ name: '', phone: '', access_key: '' });
   const [editingBarber, setEditingBarber] = useState<string | null>(null);
+  const [editingBarberData, setEditingBarberData] = useState({ id: null as string | null, name: '', phone: '', access_key: '' });
 
   // Todas las horas disponibles para seleccionar
   const allAvailableHours = [
@@ -155,11 +156,23 @@ const AdminSettings: React.FC = () => {
   };
 
   const handleDeleteBarber = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que deseas desactivar este barbero?')) {
+    // Check if the barber to be deleted is the default barber
+    if (adminSettings.default_barber_id === id) {
+      toast.error('Este barbero está configurado como el barbero por defecto. Por favor, selecciona un barbero por defecto diferente antes de eliminar este.');
+      return;
+    }
+
+    if (window.confirm('¿Estás seguro de que deseas eliminar este barbero? Esta acción es irreversible y también eliminará sus horarios específicos.')) {
       try {
         await deleteBarber(id);
+        // Optionally, if the deleted barber was the one being edited, clear the edit form
+        if (editingBarber === id) {
+          setEditingBarber(null);
+          setEditingBarberData({ id: null, name: '', phone: '', access_key: '' });
+        }
       } catch (error) {
         console.error('Error eliminando barbero:', error);
+        // Error toast is already handled in deleteBarber context function
       }
     }
   };
@@ -580,12 +593,16 @@ const AdminSettings: React.FC = () => {
                         onClick={() => {
                           // When editing, you would typically fetch the full barber details
                           // including the access_key to populate the editing form.
-                          // For now, this just sets the ID. The editing form component
-                          // would be responsible for fetching/displaying the current key.
-                          setEditingBarber(barber.id);
-                          // TODO: Populate an editing form state here that includes the access_key
-                          // e.g., const currentBarber = barbers.find(b => b.id === barber.id);
-                          // if (currentBarber) setEditingBarberData({ name: currentBarber.name, phone: currentBarber.phone, access_key: currentBarber.access_key || '' });
+                          const currentBarber = barbers.find(b => b.id === barber.id);
+                          if (currentBarber) {
+                            setEditingBarber(currentBarber.id);
+                            setEditingBarberData({
+                              id: currentBarber.id,
+                              name: currentBarber.name,
+                              phone: currentBarber.phone || '',
+                              access_key: currentBarber.access_key || '' // Use empty string if null/undefined for form
+                            });
+                          }
                         }}
                         className="text-blue-600 hover:text-blue-800"
                         title="Editar barbero"
@@ -595,7 +612,7 @@ const AdminSettings: React.FC = () => {
                       <button
                         onClick={() => handleDeleteBarber(barber.id)}
                         className="text-red-600 hover:text-red-800"
-                        title="Desactivar barbero"
+                        title="Eliminar barbero" // Changed title
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -605,66 +622,91 @@ const AdminSettings: React.FC = () => {
               </div>
             )}
           </div>
-          {/*
-            TODO: Implement Barber Editing Modal/Form here.
-            If editingBarber is not null, render a modal or an inline form here.
-            This form should include fields for Name, Phone, and Access Key.
-            Example structure for the editing form:
 
-            {editingBarber && (
-              <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-                <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">Editar Barbero</h3>
-                  // Assume editingBarberData state holds { name, phone, access_key }
-                  // Initialize editingBarberData when setEditingBarber(barber.id) is called.
-                  <input
-                    type="text"
-                    placeholder="Nombre"
-                    value={editingBarberData.name}
-                    onChange={(e) => setEditingBarberData({...editingBarberData, name: e.target.value})}
-                    className="block w-full p-2 mb-3 border"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="Teléfono"
-                    value={editingBarberData.phone}
-                    onChange={(e) => setEditingBarberData({...editingBarberData, phone: e.target.value})}
-                    className="block w-full p-2 mb-3 border"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Clave de Acceso (dejar vacío para no cambiar)"
-                    value={editingBarberData.access_key}
-                    onChange={(e) => setEditingBarberData({...editingBarberData, access_key: e.target.value})}
-                    className="block w-full p-2 mb-3 border"
-                  />
-                  <div className="flex justify-end space-x-2">
-                    <button onClick={() => setEditingBarber(null)} className="px-4 py-2 bg-gray-200 rounded-md">Cancelar</button>
-                    <button
-                      onClick={() => {
-                        const dataToUpdate: Partial<Barber> = {
-                          name: editingBarberData.name,
-                          phone: editingBarberData.phone
-                        };
-                        if (editingBarberData.access_key && editingBarberData.access_key.trim() !== '') {
-                           dataToUpdate.access_key = editingBarberData.access_key.trim();
-                        } else if (editingBarberData.access_key === '') {
-                          // If explicitly cleared, might want to set to null or handle as per requirements
-                          // For now, only update if not empty. If it needs to be cleared,
-                          // the backend/updateBarber should handle empty string as setting it to null or empty.
-                          // Or, provide a specific "Remove Key" button.
-                        }
-                        handleUpdateBarber(editingBarber, dataToUpdate);
-                      }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md"
-                    >
-                      Actualizar
-                    </button>
+          {/* Barber Editing Modal/Form */}
+          {editingBarber && editingBarberData.id && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+              <div className="relative mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white">
+                <h3 className="text-xl font-semibold leading-6 text-gray-900 mb-6">
+                  Editar Barbero: {editingBarberData.name}
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Nombre del barbero"
+                      value={editingBarberData.name}
+                      onChange={(e) => setEditingBarberData({ ...editingBarberData, name: e.target.value })}
+                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Teléfono WhatsApp
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+1234567890"
+                      value={editingBarberData.phone}
+                      onChange={(e) => setEditingBarberData({ ...editingBarberData, phone: e.target.value })}
+                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nueva Clave de Acceso
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Dejar vacío para no cambiar clave"
+                      value={editingBarberData.access_key || ''} // Ensure it's controlled, use empty string for null
+                      onChange={(e) => setEditingBarberData({ ...editingBarberData, access_key: e.target.value })}
+                      className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Si dejas este campo vacío, la clave de acceso actual no se modificará.
+                    </p>
                   </div>
                 </div>
+                <div className="flex justify-end space-x-3 mt-8">
+                  <button
+                    onClick={() => {
+                      setEditingBarber(null);
+                      setEditingBarberData({ id: null, name: '', phone: '', access_key: '' }); // Reset data
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!editingBarberData.id) return; // Should not happen if modal is visible
+
+                      const updates: { name: string; phone: string; access_key?: string } = {
+                        name: editingBarberData.name.trim(),
+                        phone: editingBarberData.phone.trim(),
+                      };
+
+                      if (editingBarberData.access_key && editingBarberData.access_key.trim() !== '') {
+                        updates.access_key = editingBarberData.access_key.trim();
+                      }
+                      // If access_key is empty, we don't include it in `updates`, so it won't be changed.
+
+                      handleUpdateBarber(editingBarberData.id, updates);
+                      setEditingBarberData({ id: null, name: '', phone: '', access_key: '' }); // Reset after save
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                  >
+                    <Save className="h-4 w-4 inline mr-2" />
+                    Guardar Cambios
+                  </button>
+                </div>
               </div>
-            )}
-          */}
+            </div>
+          )}
         </div>
       )}
     </div>
