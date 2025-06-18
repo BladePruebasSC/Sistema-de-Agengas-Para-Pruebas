@@ -42,7 +42,7 @@ const AdminSettings: React.FC = () => {
   const [hoursSettings, setHoursSettings] = useState<any[]>([]);
 
   // Estados para barberos
-  const [newBarber, setNewBarber] = useState({ name: '', phone: '' });
+  const [newBarber, setNewBarber] = useState({ name: '', phone: '', access_key: '' });
   const [editingBarber, setEditingBarber] = useState<string | null>(null);
 
   // Todas las horas disponibles para seleccionar
@@ -127,8 +127,8 @@ const AdminSettings: React.FC = () => {
   };
 
   const handleCreateBarber = async () => {
-    if (!newBarber.name.trim() || !newBarber.phone.trim()) {
-      toast.error('Por favor completa todos los campos');
+    if (!newBarber.name.trim() || !newBarber.phone.trim() || !newBarber.access_key.trim()) {
+      toast.error('Por favor completa todos los campos, incluyendo la clave de acceso.');
       return;
     }
 
@@ -136,9 +136,10 @@ const AdminSettings: React.FC = () => {
       await createBarber({
         name: newBarber.name.trim(),
         phone: newBarber.phone.trim(),
+        access_key: newBarber.access_key.trim(),
         is_active: true
       });
-      setNewBarber({ name: '', phone: '' });
+      setNewBarber({ name: '', phone: '', access_key: '' });
     } catch (error) {
       console.error('Error creando barbero:', error);
     }
@@ -498,7 +499,8 @@ const AdminSettings: React.FC = () => {
           {/* Agregar nuevo barbero */}
           <div className="border border-gray-200 rounded-lg p-4">
             <h3 className="text-lg font-medium mb-4">Agregar Nuevo Barbero</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Adjusted grid to md:grid-cols-4 to accommodate the new field and button */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nombre
@@ -523,10 +525,22 @@ const AdminSettings: React.FC = () => {
                   placeholder="+1234567890"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Clave de Acceso (para ver sus citas)
+                </label>
+                <input
+                  type="text"
+                  value={newBarber.access_key}
+                  onChange={(e) => setNewBarber({ ...newBarber, access_key: e.target.value })}
+                  className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
+                  placeholder="Clave secreta"
+                />
+              </div>
               <div className="flex items-end">
                 <button
                   onClick={handleCreateBarber}
-                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 w-full md:w-auto justify-center"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Agregar
@@ -548,15 +562,31 @@ const AdminSettings: React.FC = () => {
                       <Users className="h-5 w-5 text-blue-500" />
                       <div>
                         <p className="font-medium text-gray-900">{barber.name}</p>
+                        <p className="font-medium text-gray-900">{barber.name}</p>
                         <p className="text-sm text-gray-500 flex items-center">
                           <Phone className="h-3 w-3 mr-1" />
                           {barber.phone}
                         </p>
+                        {/* Displaying access key here is a security risk if not handled carefully.
+                            Typically, admin might see it or it's only set/reset.
+                            For now, we are not displaying it directly in the list.
+                            It should be editable in the editing form.
+                        */}
+                        {/* <p className="text-xs text-gray-400">Key: {barber.access_key || 'N/A'}</p> */}
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => setEditingBarber(barber.id)}
+                        onClick={() => {
+                          // When editing, you would typically fetch the full barber details
+                          // including the access_key to populate the editing form.
+                          // For now, this just sets the ID. The editing form component
+                          // would be responsible for fetching/displaying the current key.
+                          setEditingBarber(barber.id);
+                          // TODO: Populate an editing form state here that includes the access_key
+                          // e.g., const currentBarber = barbers.find(b => b.id === barber.id);
+                          // if (currentBarber) setEditingBarberData({ name: currentBarber.name, phone: currentBarber.phone, access_key: currentBarber.access_key || '' });
+                        }}
                         className="text-blue-600 hover:text-blue-800"
                         title="Editar barbero"
                       >
@@ -575,6 +605,66 @@ const AdminSettings: React.FC = () => {
               </div>
             )}
           </div>
+          {/*
+            TODO: Implement Barber Editing Modal/Form here.
+            If editingBarber is not null, render a modal or an inline form here.
+            This form should include fields for Name, Phone, and Access Key.
+            Example structure for the editing form:
+
+            {editingBarber && (
+              <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">Editar Barbero</h3>
+                  // Assume editingBarberData state holds { name, phone, access_key }
+                  // Initialize editingBarberData when setEditingBarber(barber.id) is called.
+                  <input
+                    type="text"
+                    placeholder="Nombre"
+                    value={editingBarberData.name}
+                    onChange={(e) => setEditingBarberData({...editingBarberData, name: e.target.value})}
+                    className="block w-full p-2 mb-3 border"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Teléfono"
+                    value={editingBarberData.phone}
+                    onChange={(e) => setEditingBarberData({...editingBarberData, phone: e.target.value})}
+                    className="block w-full p-2 mb-3 border"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Clave de Acceso (dejar vacío para no cambiar)"
+                    value={editingBarberData.access_key}
+                    onChange={(e) => setEditingBarberData({...editingBarberData, access_key: e.target.value})}
+                    className="block w-full p-2 mb-3 border"
+                  />
+                  <div className="flex justify-end space-x-2">
+                    <button onClick={() => setEditingBarber(null)} className="px-4 py-2 bg-gray-200 rounded-md">Cancelar</button>
+                    <button
+                      onClick={() => {
+                        const dataToUpdate: Partial<Barber> = {
+                          name: editingBarberData.name,
+                          phone: editingBarberData.phone
+                        };
+                        if (editingBarberData.access_key && editingBarberData.access_key.trim() !== '') {
+                           dataToUpdate.access_key = editingBarberData.access_key.trim();
+                        } else if (editingBarberData.access_key === '') {
+                          // If explicitly cleared, might want to set to null or handle as per requirements
+                          // For now, only update if not empty. If it needs to be cleared,
+                          // the backend/updateBarber should handle empty string as setting it to null or empty.
+                          // Or, provide a specific "Remove Key" button.
+                        }
+                        handleUpdateBarber(editingBarber, dataToUpdate);
+                      }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md"
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          */}
         </div>
       )}
     </div>

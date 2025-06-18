@@ -27,6 +27,7 @@ export interface Holiday {
   id: string;
   date: Date;
   description: string;
+  barber_id?: string; // New field
 }
 
 export interface BlockedTime {
@@ -51,6 +52,7 @@ export interface Barber {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  access_key?: string; // New field
 }
 
 export interface BusinessHours {
