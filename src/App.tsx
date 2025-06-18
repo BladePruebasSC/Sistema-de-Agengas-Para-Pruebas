@@ -6,6 +6,8 @@ import Footer from './components/Footer';
 import BookingPage from './pages/BookingPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import AdminPage from './pages/AdminPage';
+import ReviewsPage from './pages/ReviewsPage';
+import MyBarberAppointmentsPage from './pages/MyBarberAppointmentsPage'; // New Import
 import { AppointmentProvider } from './context/AppointmentContext';
 
 const App: React.FC = () => {
@@ -18,7 +20,9 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<BookingPage />} />
               <Route path="/appointments" element={<AppointmentsPage />} />
+              <Route path="/reviews" element={<ReviewsPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/my-appointments" element={<MyBarberAppointmentsPage />} /> {/* New Route */}
             </Routes>
           </main>
           <Footer />

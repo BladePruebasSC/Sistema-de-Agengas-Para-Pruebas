@@ -27,6 +27,7 @@ export interface Holiday {
   id: string;
   date: Date;
   description: string;
+  barber_id?: string; // New field
 }
 
 export interface BlockedTime {
@@ -51,6 +52,7 @@ export interface Barber {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  access_key?: string; // New field
 }
 
 export interface BusinessHours {
@@ -81,8 +83,36 @@ export interface AdminSettings {
   restricted_hours: string[];
   multiple_barbers_enabled: boolean;
   default_barber_id?: string;
+  reviews_enabled?: boolean; // Nueva propiedad para controlar reseñas
   created_at: string;
   updated_at: string;
+}
+
+export interface Review {
+  id: string;
+  client_name: string;
+  client_phone: string;
+  rating: number;
+  comment: string;
+  service_used: string;
+  barber_id?: string;
+  is_verified: boolean;
+  is_approved: boolean;
+  created_at: string;
+  updated_at: string;
+  barber?: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateReviewData {
+  client_name: string;
+  client_phone: string;
+  rating: number;
+  comment: string;
+  service_used: string;
+  barber_id?: string;
 }
 
 export type DayOfWeek = 'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';

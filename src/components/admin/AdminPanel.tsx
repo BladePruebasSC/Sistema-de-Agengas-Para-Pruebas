@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar as CalendarIcon, Clock, XCircle, Settings as SettingsIcon, BarChart3 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, XCircle, Settings as SettingsIcon, BarChart3, Star, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments } from '../../context/AppointmentContext';
@@ -7,12 +7,14 @@ import HolidayForm from './HolidayForm';
 import BlockedTimeForm from './BlockedTimeForm';
 import AdminSettings from './AdminSettings';
 import StatisticsPanel from './StatisticsPanel';
+import BarberScheduleManager from './BarberScheduleManager';
 import AppointmentList from '../AppointmentList';
+import ReviewsManagement from '../reviews/ReviewsManagement';
 import { Holiday, BlockedTime } from '../../types';
 
 const AdminPanel: React.FC = () => {
-  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes' | 'settings' | 'statistics'>('appointments');
-  const { holidays, blockedTimes, removeHoliday, removeBlockedTime } = useAppointments();
+  const [tab, setTab] = useState<'appointments' | 'holidays' | 'blockedTimes' | 'settings' | 'statistics' | 'reviews' | 'barberSchedules'>('appointments');
+  const { holidays, blockedTimes, removeHoliday, removeBlockedTime, adminSettings } = useAppointments();
 
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
@@ -40,6 +42,18 @@ const AdminPanel: React.FC = () => {
           >
             Estadísticas
           </button>
+          {adminSettings.reviews_enabled !== false && (
+            <button
+              className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
+                tab === 'reviews'
+                  ? 'text-red-600 border-b-2 border-red-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setTab('reviews')}
+            >
+              Reseñas
+            </button>
+          )}
           <button
             className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
               tab === 'holidays'
@@ -60,6 +74,18 @@ const AdminPanel: React.FC = () => {
           >
             Horas Bloqueadas
           </button>
+          {adminSettings.multiple_barbers_enabled && (
+            <button
+              className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
+                tab === 'barberSchedules'
+                  ? 'text-red-600 border-b-2 border-red-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setTab('barberSchedules')}
+            >
+              Horarios Barberos
+            </button>
+          )}
           <button
             className={`py-2 px-4 font-medium text-sm whitespace-nowrap ${
               tab === 'settings'
@@ -78,6 +104,14 @@ const AdminPanel: React.FC = () => {
 
         {tab === 'statistics' && (
           <StatisticsPanel />
+        )}
+
+        {tab === 'reviews' && adminSettings.reviews_enabled !== false && (
+          <ReviewsManagement />
+        )}
+
+        {tab === 'barberSchedules' && adminSettings.multiple_barbers_enabled && (
+          <BarberScheduleManager />
         )}
 
         {tab === 'holidays' && (

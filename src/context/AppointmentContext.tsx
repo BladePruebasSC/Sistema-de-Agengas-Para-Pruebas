@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { Appointment, Holiday, BlockedTime, Barber, BusinessHours, BarberSchedule, AdminSettings } from '../types';
+import { Appointment, Holiday, BlockedTime, Barber, BusinessHours, BarberSchedule, AdminSettings, Review, CreateReviewData } from '../types';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { notifyAppointmentCreated, notifyAppointmentCancelled } from '../services/whatsappService';
@@ -14,6 +14,7 @@ interface AppointmentContextType {
   businessHours: BusinessHours[];
   barberSchedules: BarberSchedule[];
   adminSettings: AdminSettings;
+  reviews: Review[];
   userPhone: string | null;
   setUserPhone: (phone: string) => void;
   cancelAppointment: (id: string) => Promise<void>;
@@ -24,7 +25,7 @@ interface AppointmentContextType {
   removeBlockedTime: (id: string) => Promise<void>;
   isTimeSlotAvailable: (date: Date, time: string, barberId?: string) => Promise<boolean>;
   getDayAvailability: (date: Date, barberId?: string) => Promise<{ [hour: string]: boolean }>;
-  getAvailableHoursForDate: (date: Date) => string[];
+  getAvailableHoursForDate: (date: Date, barberId?: string) => string[];
   formatHour12h: (hour24: string) => string;
   loadAdminSettings: () => Promise<void>;
   getFutureAppointments: () => Appointment[];
@@ -39,6 +40,17 @@ interface AppointmentContextType {
   updateBarberSchedule: (barberId: string, dayOfWeek: number, schedule: Partial<BarberSchedule>) => Promise<void>;
   // Función para actualizar configuración
   updateAdminSettings: (settings: Partial<AdminSettings>) => Promise<void>;
+  // Funciones para reseñas
+  createReview: (reviewData: CreateReviewData) => Promise<Review>;
+  updateReview: (id: string, reviewData: Partial<Review>) => Promise<void>;
+  deleteReview: (id: string) => Promise<void>;
+  getApprovedReviews: () => Review[];
+  getAverageRating: () => number;
+  // Barber Access Key Auth
+  loggedInBarber: Barber | null;
+  verifyBarberAccessKey: (accessKey: string) => Promise<Barber | null>;
+  logoutBarber: () => void;
+  getAppointmentsForBarber: (barberId: string) => Appointment[];
 }
 
 // Genera un rango de horas en formato HH:00
@@ -106,16 +118,19 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([]);
   const [barberSchedules, setBarberSchedules] = useState<BarberSchedule[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [adminSettings, setAdminSettings] = useState<AdminSettings>({
     id: '',
     early_booking_restriction: false,
     early_booking_hours: 12,
     restricted_hours: ['7:00 AM', '8:00 AM'],
     multiple_barbers_enabled: false,
+    reviews_enabled: true,
     created_at: '',
     updated_at: ''
   });
   const [userPhone, setUserPhone] = useState<string | null>(() => localStorage.getItem('userPhone'));
+  const [loggedInBarber, setLoggedInBarber] = useState<Barber | null>(null);
 
   // Función para cargar configuración de admin
   const loadAdminSettings = async () => {
@@ -150,9 +165,42 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     return appointments.filter(appointment => !appointment.cancelled);
   }, [appointments]);
 
-  // Función para obtener horarios disponibles según configuración
-  const getAvailableHoursForDate = useCallback((date: Date): string[] => {
+  // Función para obtener horarios disponibles según configuración (con soporte para barberos específicos)
+  const getAvailableHoursForDate = useCallback((date: Date, barberId?: string): string[] => {
     const dayOfWeek = date.getDay();
+    
+    // Si hay barberId específico y horarios de barbero habilitados, usar horarios del barbero
+    if (barberId && adminSettings.multiple_barbers_enabled) {
+      const barberSchedule = barberSchedules.find(bs => 
+        bs.barber_id === barberId && bs.day_of_week === dayOfWeek
+      );
+      
+      if (barberSchedule && !barberSchedule.is_available) {
+        return []; // Barbero no disponible este día
+      }
+      
+      if (barberSchedule) {
+        const hours: string[] = [];
+        
+        // Horarios de mañana del barbero
+        if (barberSchedule.morning_start && barberSchedule.morning_end) {
+          const startHour = parseInt(barberSchedule.morning_start.split(':')[0]);
+          const endHour = parseInt(barberSchedule.morning_end.split(':')[0]);
+          hours.push(...generateHoursRange(startHour, endHour - 1));
+        }
+        
+        // Horarios de tarde del barbero
+        if (barberSchedule.afternoon_start && barberSchedule.afternoon_end) {
+          const startHour = parseInt(barberSchedule.afternoon_start.split(':')[0]);
+          const endHour = parseInt(barberSchedule.afternoon_end.split(':')[0]);
+          hours.push(...generateHoursRange(startHour, endHour - 1));
+        }
+        
+        return hours.map(formatHour12h);
+      }
+    }
+    
+    // Usar horarios generales del negocio
     const dayHours = businessHours.find(bh => bh.day_of_week === dayOfWeek);
     
     if (!dayHours || !dayHours.is_open) return [];
@@ -174,7 +222,21 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
     
     return hours.map(formatHour12h);
-  }, [businessHours]);
+  }, [businessHours, barberSchedules, adminSettings.multiple_barbers_enabled]);
+
+  // Función para obtener reseñas aprobadas
+  const getApprovedReviews = useCallback((): Review[] => {
+    return reviews.filter(review => review.is_approved);
+  }, [reviews]);
+
+  // Función para calcular calificación promedio
+  const getAverageRating = useCallback((): number => {
+    const approvedReviews = getApprovedReviews();
+    if (approvedReviews.length === 0) return 0;
+    
+    const totalRating = approvedReviews.reduce((sum, review) => sum + review.rating, 0);
+    return Math.round((totalRating / approvedReviews.length) * 10) / 10;
+  }, [getApprovedReviews]);
 
   const fetchAppointments = async () => {
     try {
@@ -200,7 +262,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     try {
       const { data, error } = await supabase
         .from('holidays')
-        .select('*')
+        .select('*, barber_id') // Ensure barber_id is selected
         .order('date', { ascending: true });
       if (error) throw error;
       const formattedHolidays = data.map(holiday => ({
@@ -270,6 +332,22 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+  const fetchReviews = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select(`
+          *,
+          barber:barbers(id, name)
+        `)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setReviews(data || []);
+    } catch (error) {
+      toast.error('Error al cargar las reseñas');
+    }
+  };
+
   useEffect(() => {
     const initializeData = async () => {
       await loadAdminSettings();
@@ -279,7 +357,8 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         fetchBlockedTimes(),
         fetchBarbers(),
         fetchBusinessHours(),
-        fetchBarberSchedules()
+        fetchBarberSchedules(),
+        fetchReviews()
       ]);
     };
     
@@ -295,13 +374,31 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
       const formattedDate = formatDateForSupabase(date);
       
-      // Verificar feriados
-      const { data: holidaysData } = await supabase
+      // Verify holidays considering barber_id
+      let holidayQueryBuilder = supabase
         .from('holidays')
-        .select('id')
+        .select('id, barber_id')
         .eq('date', formattedDate);
-      
-      if (holidaysData && holidaysData.length > 0) return false;
+
+      const { data: holidaysOnDate, error: holidaysError } = await holidayQueryBuilder;
+
+      if (holidaysError) {
+        console.error("Error fetching holidays in isTimeSlotAvailable:", holidaysError);
+        return false; // Fail safe, assume unavailable if error
+      }
+
+      if (holidaysOnDate && holidaysOnDate.length > 0) {
+        const isGeneralHoliday = holidaysOnDate.some(h => h.barber_id === null);
+        if (isGeneralHoliday) {
+          return false; // General holiday makes it unavailable for everyone
+        }
+        if (barberId) {
+          const isBarberSpecificHoliday = holidaysOnDate.some(h => h.barber_id === barberId);
+          if (isBarberSpecificHoliday) {
+            return false; // Specific holiday for this barber
+          }
+        }
+      }
       
       // Verificar horarios bloqueados
       const { data: blockedData } = await supabase
@@ -338,11 +435,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const getDayAvailability = useCallback(async (date: Date, barberId?: string) => {
     const formattedDate = formatDateForSupabase(date);
-    const hours = getAvailableHoursForDate(date);
+    const hours = getAvailableHoursForDate(date, barberId);
     if (hours.length === 0) return {};
 
     const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([
-      supabase.from('holidays').select('id').eq('date', formattedDate),
+      supabase.from('holidays').select('id, barber_id').eq('date', formattedDate), // Fetch barber_id
       supabase.from('blocked_times').select('time,timeSlots').eq('date', formattedDate),
       barberId 
         ? supabase.from('appointments').select('time').eq('date', formattedDate).eq('barber_id', barberId).eq('cancelled', false)
@@ -350,9 +447,26 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     ]);
 
     const availability: { [hour: string]: boolean } = {};
+
+    // Process holidays considering barber_id
+    let activeHolidaysForContext = false;
     if (holidaysData && holidaysData.length > 0) {
+      const isGeneralHoliday = holidaysData.some(h => h.barber_id === null);
+      if (isGeneralHoliday) {
+        activeHolidaysForContext = true;
+      } else if (barberId) { // Only check barber-specific if no general holiday
+        const isBarberSpecificHoliday = holidaysData.some(h => h.barber_id === barberId);
+        if (isBarberSpecificHoliday) {
+          activeHolidaysForContext = true;
+        }
+      }
+      // If not multiple_barbers_enabled, any holiday (even barber specific) might count as general
+      // For now, sticking to the logic: general holidays block all, specific holidays block specific barber.
+    }
+
+    if (activeHolidaysForContext) {
       hours.forEach(h => { availability[h] = false; });
-      return availability;
+      return availability; // If it's a holiday for the current context, all hours are unavailable.
     }
 
     const blockedSlots = new Set<string>();
@@ -389,8 +503,59 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
       const formattedDate = formatDateForSupabase(appointmentData.date);
       
-      // Usar el barberId que viene en appointmentData, no el por defecto
-      const barberId = appointmentData.barber_id || appointmentData.barberId || adminSettings.default_barber_id;
+      let determinedBarberId = appointmentData.barber_id || appointmentData.barberId;
+
+      // Check if the initially determinedBarberId is a string with actual content.
+      // A "valid ID string" means it's a string and not empty after trimming.
+      let isValidIdString = typeof determinedBarberId === 'string' && determinedBarberId.trim() !== "";
+
+      if (!isValidIdString) {
+        // If appointmentData didn't provide a valid ID, try the default admin setting.
+        if (typeof adminSettings.default_barber_id === 'string' && adminSettings.default_barber_id.trim() !== "") {
+          determinedBarberId = adminSettings.default_barber_id;
+          // Re-check if this default ID is valid (it should be, given the condition above)
+          isValidIdString = true;
+        } else {
+          // No valid ID from appointmentData, and no valid default_barber_id either.
+          // This is an error condition.
+          if (adminSettings.multiple_barbers_enabled) {
+            console.error("Error: No barber ID provided in appointmentData, and no valid default_barber_id is set, while multiple barbers are enabled.");
+            throw new Error('No se pudo determinar un barbero para la cita. Por favor, seleccione un barbero o configure un barbero por defecto.');
+          } else {
+            // Single barber mode, but default_barber_id is missing or invalid.
+            console.error("Error: default_barber_id is not set or is invalid in single barber mode.");
+            throw new Error('Error de configuración: El barbero por defecto no está configurado o es inválido.');
+          }
+        }
+      }
+
+      // Final check: After attempting to use appointmentData and default_barber_id,
+      // determinedBarberId MUST be a non-empty string.
+      // Re-evaluate isValidIdString in case determinedBarberId was updated from default.
+      isValidIdString = typeof determinedBarberId === 'string' && determinedBarberId.trim() !== "";
+
+      if (!isValidIdString) {
+        // This should theoretically not be reached if the logic above is correct and throws errors appropriately.
+        // However, as a safeguard:
+        console.error("Critical Error: determinedBarberId is still not a valid non-empty string after all checks.");
+        throw new Error('Error crítico inesperado al determinar el barbero para la cita.');
+      }
+
+      // Ensure determinedBarberId is the trimmed version if it's a string
+      if (typeof determinedBarberId === 'string') {
+        determinedBarberId = determinedBarberId.trim();
+      }
+
+      console.log('Attempting to create appointment with data:', {
+        date: formattedDate,
+        time: appointmentData.time,
+        clientName: appointmentData.clientName,
+        clientPhone: appointmentData.clientPhone,
+        service: appointmentData.service,
+        confirmed: appointmentData.confirmed,
+        barber_id: determinedBarberId, // Log the actual value being sent
+        cancelled: false
+      });
       
       const { data: newAppointment, error } = await supabase
         .from('appointments')
@@ -401,7 +566,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           clientPhone: appointmentData.clientPhone,
           service: appointmentData.service,
           confirmed: appointmentData.confirmed,
-          barber_id: barberId,
+          barber_id: determinedBarberId,
           cancelled: false
         }])
         .select(`
@@ -409,11 +574,14 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           barber:barbers(id, name, phone)
         `)
         .single();
-      if (error) throw new Error('Error al crear la cita en la base de datos');
+      if (error) {
+        console.error('Supabase error creating appointment:', error); // Log the full Supabase error
+        throw new Error(`Error al crear la cita en la base de datos: ${error.message}`); // Include Supabase message
+      }
       
       try {
         // Obtener el barbero para la notificación
-        const barber = barbers.find(b => b.id === barberId) || newAppointment.barber;
+        const barber = barbers.find(b => b.id === determinedBarberId) || newAppointment.barber;
         const barberPhone = barber?.phone || '+18092033894';
         
         // Enviar notificaciones por WhatsApp Web
@@ -494,22 +662,38 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
     try {
       const formattedDate = formatDateForSupabase(holidayData.date);
-      const { data: existingHolidays, error: checkError } = await supabase
-        .from('holidays')
-        .select('*')
-        .eq('date', formattedDate);
+
+      // Revised check: Only block if it's a general holiday or the same barber-specific holiday
+      let query = supabase.from('holidays').select('id').eq('date', formattedDate);
+      if (holidayData.barber_id) {
+          query = query.eq('barber_id', holidayData.barber_id);
+      } else {
+          query = query.is('barber_id', null);
+      }
+      const { data: existingHoliday, error: checkError } = await query;
       if (checkError) throw checkError;
-      if (existingHolidays && existingHolidays.length > 0) throw new Error('Ya existe un feriado en esta fecha');
+      if (existingHoliday && existingHoliday.length > 0) {
+           throw new Error(holidayData.barber_id ? 'Este barbero ya tiene un feriado en esta fecha.' : 'Ya existe un feriado general en esta fecha.');
+      }
+
+      const insertData: any = { ...holidayData, date: formattedDate };
+      if (!insertData.barber_id) { // Ensure barber_id is null if not provided or empty
+          insertData.barber_id = null;
+      }
+
       const { data, error } = await supabase
         .from('holidays')
-        .insert([{ ...holidayData, date: formattedDate }])
-        .select()
+        .insert([insertData]) // holidayData might contain barber_id
+        .select('*, barber_id') // Ensure barber_id is selected on return
         .single();
       if (error) throw error;
+
       const newHoliday = { ...data, date: parseSupabaseDate(data.date) };
-      setHolidays(prev => [...prev, newHoliday]);
+      setHolidays(prev => [...prev, newHoliday].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())); // Keep sorted
+      toast.success(holidayData.barber_id ? 'Feriado específico para barbero agregado.' : 'Feriado general agregado.');
       return newHoliday;
     } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al crear el feriado');
       throw error;
     }
   };
@@ -667,10 +851,115 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+  // Funciones para reseñas
+  const createReview = async (reviewData: CreateReviewData): Promise<Review> => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert([reviewData])
+        .select(`
+          *,
+          barber:barbers(id, name)
+        `)
+        .single();
+      if (error) throw error;
+      setReviews(prev => [data, ...prev]);
+      toast.success('Reseña enviada exitosamente');
+      return data;
+    } catch (error) {
+      toast.error('Error al enviar la reseña');
+      throw error;
+    }
+  };
+
+  const updateReview = async (id: string, reviewData: Partial<Review>): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('reviews')
+        .update({
+          ...reviewData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      if (error) throw error;
+      setReviews(prev => prev.map(r => r.id === id ? { ...r, ...reviewData } : r));
+      toast.success('Reseña actualizada exitosamente');
+    } catch (error) {
+      toast.error('Error al actualizar la reseña');
+      throw error;
+    }
+  };
+
+  const deleteReview = async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase.from('reviews').delete().eq('id', id);
+      if (error) throw error;
+      setReviews(prev => prev.filter(r => r.id !== id));
+      toast.success('Reseña eliminada exitosamente');
+    } catch (error) {
+      toast.error('Error al eliminar la reseña');
+      throw error;
+    }
+  };
+
   const handleSetUserPhone = (phone: string) => {
     setUserPhone(phone);
     localStorage.setItem('userPhone', phone);
   };
+
+  const verifyBarberAccessKey = useCallback(async (accessKey: string): Promise<Barber | null> => {
+    if (!accessKey || accessKey.trim() === '') {
+      setLoggedInBarber(null);
+      return null;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('barbers')
+        .select('*')
+        .eq('access_key', accessKey.trim())
+        .eq('is_active', true) // Only allow active barbers to log in
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') { // Not found
+          toast.error('Clave de acceso incorrecta o barbero no encontrado.');
+        } else {
+          toast.error('Error al verificar la clave de acceso.');
+        }
+        console.error('Error verifying barber access key:', error);
+        setLoggedInBarber(null);
+        return null;
+      }
+
+      if (data) {
+        setLoggedInBarber(data as Barber);
+        toast.success(`Bienvenido, ${data.name}!`);
+        return data as Barber;
+      }
+      setLoggedInBarber(null); // Should be caught by PGRST116, but as a fallback
+      return null;
+    } catch (err) {
+      toast.error('Ocurrió un error inesperado.');
+      console.error('Unexpected error in verifyBarberAccessKey:', err);
+      setLoggedInBarber(null);
+      return null;
+    }
+  }, []);
+
+  const logoutBarber = useCallback(() => {
+    setLoggedInBarber(null);
+    // Potentially clear any related stored data if needed, e.g., from localStorage
+    toast.success('Sesión cerrada.');
+  }, []);
+
+  const getAppointmentsForBarber = useCallback((barberId: string): Appointment[] => {
+    const today = new Date();
+    return appointments.filter(appointment =>
+      appointment.barber_id === barberId &&
+      !appointment.cancelled &&
+      (isSameDate(appointment.date, today) || isFutureDate(appointment.date)) // Only future or today's appointments
+    ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.time.localeCompare(b.time)); // Sort by date then time
+  }, [appointments]);
 
   const value = {
     appointments,
@@ -680,6 +969,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     businessHours,
     barberSchedules,
     adminSettings,
+    reviews,
     userPhone,
     setUserPhone: handleSetUserPhone,
     cancelAppointment,
@@ -701,6 +991,16 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     updateBusinessHours,
     updateBarberSchedule,
     updateAdminSettings,
+    createReview,
+    updateReview,
+    deleteReview,
+    getApprovedReviews,
+    getAverageRating,
+    // Barber Access Key Auth
+    loggedInBarber,
+    verifyBarberAccessKey,
+    logoutBarber,
+    getAppointmentsForBarber,
   };
 
   return (
