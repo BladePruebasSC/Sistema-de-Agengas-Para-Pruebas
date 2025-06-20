@@ -35,6 +35,12 @@ const Header: React.FC = () => {
               </NavLink>
             )}
             
+            {/* Botón para barberos */}
+            <NavLink to="/my-appointments" current={location.pathname === "/my-appointments"}>
+              <Scissors className="h-5 w-5 mr-1" />
+              <span>Barberos</span>
+            </NavLink>
+            
             <NavLink to="/admin" current={location.pathname.startsWith("/admin")}>
               <Settings className="h-5 w-5 mr-1" />
               <span>Admin</span>
