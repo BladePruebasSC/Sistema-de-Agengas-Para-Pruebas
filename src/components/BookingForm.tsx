@@ -116,8 +116,21 @@ const BookingForm: React.FC<BookingFormProps> = ({
     if (!formIsValid) return;
 
     try {
-      const cleanPhone = formData.clientPhone.replace(/\D/g, '');
-      
+      let processedPhone = formData.clientPhone.replace(/\D/g, ''); // 1. Limpiar para obtener solo dígitos
+
+      if (processedPhone.length === 10) {
+        // 2. Si tiene 10 dígitos (ej. 8091234567), se asume que es de la región +1 y se antepone "+1".
+        processedPhone = `+1${processedPhone}`;
+      } else if (processedPhone.length === 11 && processedPhone.startsWith('1')) {
+        // 3. Si tiene 11 dígitos y empieza con "1" (ej. 18091234567),
+        //    se reemplaza el "1" inicial con "+" (quedando "+1809...").
+        processedPhone = `+${processedPhone}`;
+      }
+      // Números con otros formatos o que ya contengan un '+' (y sobrevivieron parcialmente al replace)
+      // se guardarán como queden. Ej: si alguien pone "+52..." y el replace quita el '+',
+      // esta lógica no lo re-añadirá ni antepondrá +1. Se guardará "52...".
+      // Si se quiere ser más estricto o manejar más casos, esta lógica se puede expandir.
+
       // Usar el barbero seleccionado o el por defecto
       const finalBarberId = selectedBarberId || formData.barber_id || adminSettings.default_barber_id;
       console.log('[HandleSubmit] finalBarberId for createAppointment:', finalBarberId,
@@ -129,7 +142,7 @@ const BookingForm: React.FC<BookingFormProps> = ({
         date: selectedDate,
         time: selectedTime,
         clientName: formData.clientName.trim(),
-        clientPhone: cleanPhone,
+        clientPhone: processedPhone, // Usar el número procesado
         service: formData.service,
         barber_id: finalBarberId, // Asegurar que se use el barbero correcto
         confirmed: true
