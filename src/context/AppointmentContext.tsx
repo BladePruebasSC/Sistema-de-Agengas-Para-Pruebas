@@ -433,23 +433,35 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
                            (block.timeSlots && Array.isArray(block.timeSlots) && block.timeSlots.includes(time));
         if (!isSlotMatch) return false; // This specific block doesn't match the time slot.
 
-        // Convert query barberId to number if it exists, for comparison with stored numeric barber_id
-        const queryBarberIdAsNumber = barberId ? parseInt(barberId, 10) : null;
+        let queryBarberIdAsNumber: number | null = null;
+        if (barberId && typeof barberId === 'string') {
+          const parsed = parseInt(barberId, 10);
+          if (!isNaN(parsed)) {
+            queryBarberIdAsNumber = parsed;
+          }
+        } else if (typeof barberId === 'number') { // Should not happen if barberId comes from select value, but good for robustness
+          queryBarberIdAsNumber = barberId;
+        }
+
+        // console.log(`[isTimeSlotAvailable] Date: ${formattedDate}, Time: ${time}, Querying for barberId (string): "${barberId}", ParsedAsNumber: ${queryBarberIdAsNumber}, Block_barber_id: ${block.barber_id}`);
 
         // Check if the block applies
         if (block.barber_id === null) { // General block
-          // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} blocked by GENERAL block ID (block.id if available, or block itself)`);
+          // console.log(` -> General block applies.`);
           return true;
         }
         if (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber) { // Specific block for the queried barber
-          // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} blocked by SPECIFIC block for barber ${queryBarberIdAsNumber}`);
+          // console.log(` -> Specific block for this barber applies.`);
           return true;
         }
-        // If it's a specific block for a DIFFERENT barber, this block instance doesn't make the slot unavailable for the current query.
+        // If it's a specific block for a DIFFERENT barber, or if querying generally (queryBarberIdAsNumber is null) and block is specific
+        // console.log(` -> Block for barber ${block.barber_id} does NOT apply to query for ${queryBarberIdAsNumber}.`);
         return false;
       })) {
+        // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} is considered BLOCKED by one of the rules.`);
         return false; // If .some() found an applicable block, the slot is NOT available.
       }
+      // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} is considered AVAILABLE (after checking blocks).`);
       
       // Verificar citas existentes
       let appointmentQuery = supabase
@@ -511,13 +523,20 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     const blockedSlots = new Set<string>();
     if (blockedData) {
-      const queryBarberIdAsNumber = barberId ? parseInt(barberId, 10) : null; // Convert query barberId
-      // console.log(`[getDayAvailability] Date: ${formattedDate}, Querying for barberId (string): ${barberId}, AsNumber: ${queryBarberIdAsNumber}`);
+      let queryBarberIdAsNumber: number | null = null;
+      if (barberId && typeof barberId === 'string') {
+        const parsed = parseInt(barberId, 10);
+        if (!isNaN(parsed)) {
+          queryBarberIdAsNumber = parsed;
+        }
+      } else if (typeof barberId === 'number') { // Should not happen
+        queryBarberIdAsNumber = barberId;
+      }
+      // console.log(`[getDayAvailability] Date: ${formattedDate}, Querying for barberId (string): "${barberId}", ParsedAsNumber: ${queryBarberIdAsNumber}`);
       // console.log(`[getDayAvailability] All blockedData for date ${formattedDate}:`, JSON.stringify(blockedData));
 
       for (const block of blockedData) {
         // console.log(`[getDayAvailability] Processing block: ${JSON.stringify(block)}`);
-        // Check if the block applies to the current context (general or specific barber)
         const isApplicableBlock = block.barber_id === null || (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber);
         // console.log(`[getDayAvailability] Is block applicable? ${isApplicableBlock}`);
 
@@ -686,22 +705,24 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       ));
       
       try {
-        // Obtener el barbero para la notificación
+        // Notificación al CLIENTE cuando el negocio/barbero cancela
         const barber = barbers.find(b => b.id === appointmentToCancel.barber_id);
-        const barberPhone = barber?.phone || '+18092033894';
         
-        // Enviar notificaciones de cancelación por WhatsApp Web
         await notifyAppointmentCancelled({
-          clientPhone: appointmentToCancel.clientPhone,
+          recipientPhone: appointmentToCancel.clientPhone, // Enviar al cliente
           clientName: appointmentToCancel.clientName,
+          clientPhone: appointmentToCancel.clientPhone, // Aún necesario para contexto del mensaje si se reutiliza la interfaz
           date: format(appointmentToCancel.date, 'dd/MM/yyyy'),
           time: appointmentToCancel.time,
           service: appointmentToCancel.service,
-          barberName: barber?.name || 'Barbero',
-          barberPhone
+          barberName: barber?.name || 'la Barbería', // Nombre del barbero o genérico
+          cancellationInitiator: 'business', // Cancelación iniciada por el negocio
+          // businessName: "D' Gastón Stylo Barbería" // Opcional, si se quiere pasar explícitamente
         });
       } catch (whatsappError) {
-        console.error('Error enviando WhatsApp de cancelación:', whatsappError);
+        console.error('Error enviando WhatsApp de notificación de cancelación al cliente:', whatsappError);
+        // No fallar la cancelación de la cita si la notificación de WhatsApp falla
+        toast.error('Cita cancelada, pero hubo un error al notificar al cliente por WhatsApp.');
       }
 
       toast.success('Cita cancelada exitosamente');
