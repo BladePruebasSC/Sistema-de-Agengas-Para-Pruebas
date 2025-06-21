@@ -16,7 +16,8 @@ const Header: React.FC = () => {
             <h1 className="text-2xl font-bold">Gaston Stylo</h1>
           </div>
           
-          <nav className="flex space-x-1 sm:space-x-4">
+          {/* Navigation: Stacks vertically on mobile, row on md and up */}
+          <nav className="flex flex-col w-full space-y-2 mt-4 md:flex-row md:space-y-0 md:space-x-2 md:items-center md:mt-0 md:w-auto lg:space-x-4">
             <NavLink to="/" current={location.pathname === "/"}>
               <Calendar className="h-5 w-5 mr-1" />
               <span>Agendar</span>
