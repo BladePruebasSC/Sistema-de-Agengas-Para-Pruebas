@@ -39,6 +39,7 @@ const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
     }
 
     try {
+      console.log('[BlockedTimeForm] Submitting blocked time with selectedBarberIdForBlock:', selectedBarberIdForBlock); // DEBUG LOG
       await createBlockedTime({
         date: date,
         timeSlots: selectedTimes.sort(),

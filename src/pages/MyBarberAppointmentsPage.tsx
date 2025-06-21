@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAppointments } from '../context/AppointmentContext';
-import { Appointment, Barber } from '../types';
+import { Appointment } from '../types'; // Barber type no longer needed directly here
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Lock, LogIn, LogOut, Calendar, Clock, User, ListChecks } from 'lucide-react';
+import { Lock, LogIn, LogOut, Calendar, Clock, User, ListChecks, Trash2, AlertTriangle } from 'lucide-react'; // Added Trash2, AlertTriangle
+import toast from 'react-hot-toast'; // For notifications
 
 const MyBarberAppointmentsPage: React.FC = () => {
   const {
     verifyBarberAccessKey,
     loggedInBarber,
     logoutBarber,
-    getAppointmentsForBarber
+    getAppointmentsForBarber,
+    cancelAppointment // Get cancelAppointment from context
   } = useAppointments();
 
   const [accessKey, setAccessKey] = useState('');
@@ -133,6 +135,30 @@ const MyBarberAppointmentsPage: React.FC = () => {
                   Teléfono: <span className="font-medium ml-1">{app.clientPhone}</span>
                 </div>
               </div>
+              {!app.cancelled && ( // Solo mostrar botón si la cita no está ya cancelada
+                <div className="mt-3 pt-3 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={async () => {
+                      if (window.confirm(`¿Estás seguro de que deseas cancelar esta cita con ${app.clientName}?\nFecha: ${format(new Date(app.date), "d 'de' MMMM", { locale: es })}\nHora: ${app.time}`)) {
+                        try {
+                          await cancelAppointment(app.id);
+                          toast.success('Cita cancelada exitosamente.');
+                          // La lista se actualizará automáticamente porque getAppointmentsForBarber
+                          // filtra las citas canceladas.
+                        } catch (error) {
+                          toast.error('Error al cancelar la cita.');
+                          console.error("Error cancelling appointment from barber page:", error);
+                        }
+                      }
+                    }}
+                    className="flex items-center text-xs sm:text-sm text-red-600 hover:text-red-800 py-1 px-3 rounded-md hover:bg-red-50 transition-colors"
+                    title="Cancelar Cita"
+                  >
+                    <Trash2 size={14} className="mr-1 sm:mr-2" />
+                    Cancelar Cita
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -431,14 +431,24 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (blockedData && blockedData.some(block => {
         const isSlotMatch = (block.time && block.time === time) ||
                            (block.timeSlots && Array.isArray(block.timeSlots) && block.timeSlots.includes(time));
-        if (!isSlotMatch) return false;
+        if (!isSlotMatch) return false; // This specific block doesn't match the time slot.
+
+        // Convert query barberId to number if it exists, for comparison with stored numeric barber_id
+        const queryBarberIdAsNumber = barberId ? parseInt(barberId, 10) : null;
 
         // Check if the block applies
-        if (block.barber_id === null) return true; // General block
-        if (barberId && block.barber_id === barberId) return true; // Specific block for this barber
-        return false; // Specific block for another barber
-      })) {
+        if (block.barber_id === null) { // General block
+          // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} blocked by GENERAL block ID (block.id if available, or block itself)`);
+          return true;
+        }
+        if (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber) { // Specific block for the queried barber
+          // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} blocked by SPECIFIC block for barber ${queryBarberIdAsNumber}`);
+          return true;
+        }
+        // If it's a specific block for a DIFFERENT barber, this block instance doesn't make the slot unavailable for the current query.
         return false;
+      })) {
+        return false; // If .some() found an applicable block, the slot is NOT available.
       }
       
       // Verificar citas existentes
@@ -501,9 +511,15 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     const blockedSlots = new Set<string>();
     if (blockedData) {
+      const queryBarberIdAsNumber = barberId ? parseInt(barberId, 10) : null; // Convert query barberId
+      // console.log(`[getDayAvailability] Date: ${formattedDate}, Querying for barberId (string): ${barberId}, AsNumber: ${queryBarberIdAsNumber}`);
+      // console.log(`[getDayAvailability] All blockedData for date ${formattedDate}:`, JSON.stringify(blockedData));
+
       for (const block of blockedData) {
+        // console.log(`[getDayAvailability] Processing block: ${JSON.stringify(block)}`);
         // Check if the block applies to the current context (general or specific barber)
-        const isApplicableBlock = block.barber_id === null || (barberId && block.barber_id === barberId);
+        const isApplicableBlock = block.barber_id === null || (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber);
+        // console.log(`[getDayAvailability] Is block applicable? ${isApplicableBlock}`);
 
         if (isApplicableBlock) {
           if (block.timeSlots && Array.isArray(block.timeSlots)) {
@@ -542,43 +558,42 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       
       let determinedBarberId = appointmentData.barber_id || appointmentData.barberId;
 
-      // Check if the initially determinedBarberId is a string with actual content.
-      // A "valid ID string" means it's a string and not empty after trimming.
-      let isValidIdString = typeof determinedBarberId === 'string' && determinedBarberId.trim() !== "";
+      // Check if the determinedBarberId is a valid identifier (non-empty string or a number)
+      let isValidBarberId = (typeof determinedBarberId === 'string' && determinedBarberId.trim() !== "") ||
+                             (typeof determinedBarberId === 'number' && !isNaN(determinedBarberId));
 
-      if (!isValidIdString) {
+      if (!isValidBarberId) {
         // If appointmentData didn't provide a valid ID, try the default admin setting.
-        if (typeof adminSettings.default_barber_id === 'string' && adminSettings.default_barber_id.trim() !== "") {
-          determinedBarberId = adminSettings.default_barber_id;
-          // Re-check if this default ID is valid (it should be, given the condition above)
-          isValidIdString = true;
+        const defaultBarberId = adminSettings.default_barber_id;
+        const isDefaultBarberIdValid = (typeof defaultBarberId === 'string' && defaultBarberId.trim() !== "") ||
+                                       (typeof defaultBarberId === 'number' && !isNaN(defaultBarberId));
+
+        if (isDefaultBarberIdValid) {
+          determinedBarberId = defaultBarberId;
+          isValidBarberId = true; // Default ID is valid
         } else {
           // No valid ID from appointmentData, and no valid default_barber_id either.
-          // This is an error condition.
           if (adminSettings.multiple_barbers_enabled) {
             console.error("Error: No barber ID provided in appointmentData, and no valid default_barber_id is set, while multiple barbers are enabled.");
             throw new Error('No se pudo determinar un barbero para la cita. Por favor, seleccione un barbero o configure un barbero por defecto.');
           } else {
             // Single barber mode, but default_barber_id is missing or invalid.
-            console.error("Error: default_barber_id is not set or is invalid in single barber mode.");
-            throw new Error('Error de configuración: El barbero por defecto no está configurado o es inválido.');
+            // Or, if not multiple_barbers_enabled, but determinedBarberId was still somehow invalid (e.g. null from a bug)
+            console.error("Error: default_barber_id is not set or is invalid, or no barberId provided in single barber mode.");
+            throw new Error('Error de configuración: El barbero por defecto no está configurado o es inválido, o no se proporcionó barbero.');
           }
         }
       }
 
       // Final check: After attempting to use appointmentData and default_barber_id,
-      // determinedBarberId MUST be a non-empty string.
-      // Re-evaluate isValidIdString in case determinedBarberId was updated from default.
-      isValidIdString = typeof determinedBarberId === 'string' && determinedBarberId.trim() !== "";
-
-      if (!isValidIdString) {
-        // This should theoretically not be reached if the logic above is correct and throws errors appropriately.
-        // However, as a safeguard:
-        console.error("Critical Error: determinedBarberId is still not a valid non-empty string after all checks.");
+      // determinedBarberId must be valid.
+      if (!isValidBarberId) {
+         // This should ideally not be reached if the logic above is correct.
+        console.error("Critical Error: determinedBarberId is still not valid after all checks.");
         throw new Error('Error crítico inesperado al determinar el barbero para la cita.');
       }
 
-      // Ensure determinedBarberId is the trimmed version if it's a string
+      // If determinedBarberId was a string, trim it. Numbers don't need trimming.
       if (typeof determinedBarberId === 'string') {
         determinedBarberId = determinedBarberId.trim();
       }
@@ -699,24 +714,34 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   const createHoliday = async (holidayData: Omit<Holiday, 'id'>): Promise<Holiday> => {
     try {
       const formattedDate = formatDateForSupabase(holidayData.date);
+      let existingHolidayCheckQuery = supabase.from('holidays').select('id').eq('date', formattedDate);
 
-      // Revised check: Only block if it's a general holiday or the same barber-specific holiday
-      let query = supabase.from('holidays').select('id').eq('date', formattedDate);
       if (holidayData.barber_id) {
-          query = query.eq('barber_id', holidayData.barber_id);
+        // Creating a barber-specific holiday
+        // Check if THIS barber already has a holiday on this date
+        existingHolidayCheckQuery = existingHolidayCheckQuery.eq('barber_id', holidayData.barber_id);
+        const { data: existingSpecificHoliday, error: checkError } = await existingHolidayCheckQuery;
+        if (checkError) throw checkError;
+        if (existingSpecificHoliday && existingSpecificHoliday.length > 0) {
+          throw new Error('Este barbero ya tiene un feriado programado en esta fecha.');
+        }
       } else {
-          query = query.is('barber_id', null);
-      }
-      const { data: existingHoliday, error: checkError } = await query;
-      if (checkError) throw checkError;
-      if (existingHoliday && existingHoliday.length > 0) {
-           throw new Error(holidayData.barber_id ? 'Este barbero ya tiene un feriado en esta fecha.' : 'Ya existe un feriado general en esta fecha.');
+        // Creating a general holiday
+        // Check if a GENERAL holiday already exists on this date
+        existingHolidayCheckQuery = existingHolidayCheckQuery.is('barber_id', null);
+        const { data: existingGeneralHoliday, error: checkError } = await existingHolidayCheckQuery;
+        if (checkError) throw checkError;
+        if (existingGeneralHoliday && existingGeneralHoliday.length > 0) {
+          throw new Error('Ya existe un feriado general programado en esta fecha.');
+        }
       }
 
-      const insertData: any = { ...holidayData, date: formattedDate };
-      if (!insertData.barber_id) { // Ensure barber_id is null if not provided or empty
-          insertData.barber_id = null;
-      }
+      // Proceed to insert if no conflicting holiday found based on the new logic
+      const insertData: any = {
+        date: formattedDate,
+        description: holidayData.description,
+        barber_id: holidayData.barber_id || null // Ensure barber_id is explicitly null if not provided
+      };
 
       const { data, error } = await supabase
         .from('holidays')
@@ -748,6 +773,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const createBlockedTime = async (blockedTimeData: Omit<BlockedTime, 'id' | 'barber_id'> & { barber_id?: string }): Promise<BlockedTime> => {
+    console.log('[createBlockedTime] Received blockedTimeData:', JSON.stringify(blockedTimeData)); // DEBUG LOG
     try {
       const formattedDate = formatDateForSupabase(blockedTimeData.date);
       const dataToInsert = {
@@ -755,8 +781,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         time: Array.isArray(blockedTimeData.timeSlots) ? blockedTimeData.timeSlots[0] : blockedTimeData.timeSlots,
         timeSlots: blockedTimeData.timeSlots,
         reason: blockedTimeData.reason || 'Horario bloqueado',
-        barber_id: blockedTimeData.barber_id || null // Add barber_id, defaulting to null
+        // Ensure barber_id is a number if present, otherwise null
+        barber_id: blockedTimeData.barber_id ? Number(blockedTimeData.barber_id) : null
       };
+      console.log('[createBlockedTime] Data to insert into Supabase:', JSON.stringify(dataToInsert)); // DEBUG LOG
       const { data, error } = await supabase
         .from('blocked_times')
         .insert([dataToInsert])

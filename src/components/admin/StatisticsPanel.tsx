@@ -62,13 +62,21 @@ const StatisticsPanel: React.FC = () => {
   const getFilteredAppointments = () => {
     let filtered = appointments.filter(app => !app.cancelled);
     
-    if (selectedBarberId) {
-      console.log(`Filtering for barber: ${selectedBarberId}. Appointments before filter:`, filtered.length);
-      const barberAppointments = filtered.filter(app => app.barber_id === selectedBarberId);
-      console.log(`Appointments after filter for barber ${selectedBarberId}:`, barberAppointments.length, barberAppointments.map(a => ({ id: a.id, barber_id: a.barber_id, date: a.date, service: a.service })));
+    if (selectedBarberId) { // selectedBarberId es un string o null
+      const barberIdAsNumber = parseInt(selectedBarberId, 10);
+
+      console.log(`Filtering for barber ID (original string: "${selectedBarberId}", as number: ${barberIdAsNumber}). Appointments before filter: ${filtered.length}`);
+
+      const barberAppointments = filtered.filter(app => {
+        // console.log(`Comparing app.barber_id (${app.barber_id}, type: ${typeof app.barber_id}) with barberIdAsNumber (${barberIdAsNumber}, type: ${typeof barberIdAsNumber})`);
+        return app.barber_id === barberIdAsNumber;
+      });
+
+      console.log(`Appointments after filter for barber ${barberIdAsNumber}: ${barberAppointments.length}`);
+      // console.log(barberAppointments.map(a => ({ id: a.id, barber_id: a.barber_id, date: a.date, service: a.service }))); // Descomentar para ver las citas filtradas
       filtered = barberAppointments;
     } else {
-      console.log("No barber selected, using all non-cancelled appointments:", filtered.length);
+      console.log(`No barber selected, using all non-cancelled appointments: ${filtered.length}`);
     }
     
     return filtered;
