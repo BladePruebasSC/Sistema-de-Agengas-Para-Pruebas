@@ -87,14 +87,18 @@ const BookingForm: React.FC<BookingFormProps> = ({
 
     let isBarberIdMissing = false;
     if (adminSettings.multiple_barbers_enabled) {
-      if (typeof formData.barber_id === 'string') {
-        if (formData.barber_id.trim() === '') {
-          isBarberIdMissing = true;
-        }
-      } else { // null, undefined, etc.
+      // Considera faltante si es null, undefined, o un string vacío.
+      // Un número (como 1) no se consideraría faltante por esta lógica específica de "missing".
+      // El backend luego validará si '1' es un ID de barbero válido.
+      if (formData.barber_id == null || formData.barber_id === '') { // Usar == null para cubrir undefined y null, y === '' para string vacío
+        isBarberIdMissing = true;
+      } else if (typeof formData.barber_id === 'string' && formData.barber_id.trim() === '') {
+        // Cubre el caso de un string que solo contiene espacios
         isBarberIdMissing = true;
       }
+      // Si formData.barber_id es un número (ej. 1), o un string no vacío (ej. "uuid-string"), isBarberIdMissing será false.
     }
+
     if (isBarberIdMissing) {
       newErrors.barber_id = 'Debe seleccionar un barbero';
     }
