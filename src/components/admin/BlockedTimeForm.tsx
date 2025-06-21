@@ -106,9 +106,14 @@ const BlockedTimeForm: React.FC<BlockedTimeFormProps> = ({ onBlockTime }) => {
                 Barbero (Opcional)
               </label>
               <select
-                value={selectedBarberIdForBlock || ''}
+                value={selectedBarberIdForBlock === null ? '' : String(selectedBarberIdForBlock)} // Ensure value is string for select
                 onChange={(e) => {
-                  setSelectedBarberIdForBlock(e.target.value || null);
+                  const value = e.target.value;
+                  if (value === "") { // Opción "General"
+                    setSelectedBarberIdForBlock(null);
+                  } else {
+                    setSelectedBarberIdForBlock(Number(value)); // Convertir a número
+                  }
                   setSelectedTimes([]); // Reset selected times when barber changes
                 }}
                 className="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
