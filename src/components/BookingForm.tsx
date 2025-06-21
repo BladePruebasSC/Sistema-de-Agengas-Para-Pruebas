@@ -85,9 +85,20 @@ const BookingForm: React.FC<BookingFormProps> = ({
     console.log('[ValidateForm] formData.barber_id:', formData.barber_id);
     console.log('[ValidateForm] !formData.barber_id:', !formData.barber_id);
 
-    if (adminSettings.multiple_barbers_enabled && (!formData.barber_id || formData.barber_id.trim() === '')) {
+    let isBarberIdMissing = false;
+    if (adminSettings.multiple_barbers_enabled) {
+      if (typeof formData.barber_id === 'string') {
+        if (formData.barber_id.trim() === '') {
+          isBarberIdMissing = true;
+        }
+      } else { // null, undefined, etc.
+        isBarberIdMissing = true;
+      }
+    }
+    if (isBarberIdMissing) {
       newErrors.barber_id = 'Debe seleccionar un barbero';
     }
+
     setErrors(newErrors);
     const isValid = Object.keys(newErrors).length === 0;
     console.log('[ValidateForm] newErrors:', newErrors, 'isValid:', isValid);
