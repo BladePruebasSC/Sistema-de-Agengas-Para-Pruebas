@@ -81,21 +81,34 @@ const BookingForm: React.FC<BookingFormProps> = ({
     } else if (!/^\d{3}-\d{3}-\d{4}$/.test(formData.clientPhone)) {
       newErrors.clientPhone = 'Formato: 555-123-4567';
     }
-    if (adminSettings.multiple_barbers_enabled && !formData.barber_id) {
+    console.log('[ValidateForm] adminSettings.multiple_barbers_enabled:', adminSettings.multiple_barbers_enabled);
+    console.log('[ValidateForm] formData.barber_id:', formData.barber_id);
+    console.log('[ValidateForm] !formData.barber_id:', !formData.barber_id);
+
+    if (adminSettings.multiple_barbers_enabled && (!formData.barber_id || formData.barber_id.trim() === '')) {
       newErrors.barber_id = 'Debe seleccionar un barbero';
     }
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    console.log('[ValidateForm] newErrors:', newErrors, 'isValid:', isValid);
+    return isValid;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    const formIsValid = validateForm();
+    console.log('[HandleSubmit] formIsValid:', formIsValid);
+    if (!formIsValid) return;
+
     try {
       const cleanPhone = formData.clientPhone.replace(/\D/g, '');
       
       // Usar el barbero seleccionado o el por defecto
       const finalBarberId = selectedBarberId || formData.barber_id || adminSettings.default_barber_id;
+      console.log('[HandleSubmit] finalBarberId for createAppointment:', finalBarberId,
+                  'selectedBarberId:', selectedBarberId,
+                  'formData.barber_id:', formData.barber_id,
+                  'adminSettings.default_barber_id:', adminSettings.default_barber_id);
       
       await createAppointment({
         date: selectedDate,

@@ -827,36 +827,42 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
   };
 
   const deleteBarber = async (id: string): Promise<void> => {
+    console.log(`[deleteBarber] Attempting to delete barber with id: ${id}`);
     try {
       // First, delete related barber_schedules
+      console.log(`[deleteBarber] Deleting barber_schedules for barber_id: ${id}`);
       const { error: scheduleError } = await supabase
         .from('barber_schedules')
         .delete()
         .eq('barber_id', id);
 
       if (scheduleError) {
-        console.error('Error deleting barber schedules:', scheduleError);
+        console.error(`[deleteBarber] Error deleting barber schedules for barber_id: ${id}`, scheduleError);
         throw new Error(`Error al eliminar los horarios del barbero: ${scheduleError.message}`);
       }
+      console.log(`[deleteBarber] Successfully deleted barber_schedules for barber_id: ${id}`);
 
       // Then, delete the barber
+      console.log(`[deleteBarber] Deleting barber from barbers table with id: ${id}`);
       const { error: barberError } = await supabase
         .from('barbers')
         .delete()
         .eq('id', id);
 
       if (barberError) {
-        console.error('Error deleting barber:', barberError);
+        console.error(`[deleteBarber] Error deleting barber from barbers table with id: ${id}`, barberError);
         throw new Error(`Error al eliminar el barbero: ${barberError.message}`);
       }
+      console.log(`[deleteBarber] Successfully deleted barber from barbers table with id: ${id}`);
 
       setBarbers(prev => prev.filter(b => b.id !== id));
       // Also update barberSchedules state locally if needed, though re-fetch might be simpler
       setBarberSchedules(prev => prev.filter(bs => bs.barber_id !== id));
       toast.success('Barbero y sus horarios eliminados exitosamente');
     } catch (error) {
+      console.error(`[deleteBarber] Catch block error for barber_id: ${id}`, error);
       toast.error(error instanceof Error ? error.message : 'Error al eliminar barbero');
-      throw error;
+      throw error; // Re-throw para que el llamador pueda saber que falló
     }
   };
 
