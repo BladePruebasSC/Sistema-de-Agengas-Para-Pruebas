@@ -390,6 +390,18 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
 
       const formattedDate = formatDateForSupabase(date);
+
+      // Parse barberId (string from UI or undefined) to a number or null for internal logic
+      let queryBarberIdAsNumber: number | null = null;
+      if (barberId && typeof barberId === 'string') {
+        const parsed = parseInt(barberId, 10);
+        if (!isNaN(parsed)) {
+          queryBarberIdAsNumber = parsed;
+        }
+      } else if (typeof barberId === 'number') { // Should not happen if barberId comes from select value, but good for robustness
+        queryBarberIdAsNumber = barberId;
+      }
+      // console.log(`[LOG isTimeSlotAvailable] Initial Query: Date: ${formattedDate}, Time: ${time}, Original barberId: "${barberId}", Parsed queryBarberIdAsNumber: ${queryBarberIdAsNumber}`);
       
       // Verify holidays considering barber_id
       let holidayQueryBuilder = supabase
