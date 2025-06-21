@@ -458,11 +458,12 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         console.log(`[LOG isTimeSlotAvailable] -> Block for barber ${block.barber_id} does not apply to query for ${queryBarberIdAsNumber}.`);
         return false; // Specific block for a different barber, or general query for a specific block (doesn't make slot unavailable for this rule)
       })) {
-        console.log(`[LOG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} is BLOCKED by a rule.`);
-        return false; // If .some() found an applicable block, the slot is NOT available.
+        console.log(`[LOG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} (parsed from "${barberId}") is BLOCKED due to a matching 'blocked_time'.`);
+        return false; // Slot NO disponible debido a un bloqueo aplicable
       }
-      console.log(`[LOG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} is AVAILABLE (after all blocks).`);
       
+      // console.log(`[LOG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} (parsed from "${barberId}") is NOT blocked by 'blocked_times'. Checking appointments...`);
+
       // Verificar citas existentes
       let appointmentQuery = supabase
         .from('appointments')
@@ -471,80 +472,107 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         .eq('time', time)
         .eq('cancelled', false);
       
-      if (barberId) {
-        appointmentQuery = appointmentQuery.eq('barber_id', barberId);
+      // Asegurarse de que queryBarberIdAsNumber se use aquí también para consistencia si es una consulta específica.
+      if (queryBarberIdAsNumber !== null) {
+        appointmentQuery = appointmentQuery.eq('barber_id', queryBarberIdAsNumber);
+      }
+      // Si queryBarberIdAsNumber es null (consulta general), no se filtra por barber_id en citas,
+      // lo que significa que si CUALQUIER barbero tiene cita, bloquea el slot general. Esto es usualmente correcto.
+      
+      const { data: appointmentsData, error: appointmentError } = await appointmentQuery;
+
+      if (appointmentError) {
+        console.error("Error fetching appointments in isTimeSlotAvailable:", appointmentError);
+        return false; // Fail safe, assume unavailable if error fetching appointments
       }
       
-      const { data: appointmentsData } = await appointmentQuery;
+      if (appointmentsData && appointmentsData.length > 0) {
+        console.log(`[LOG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} (parsed from "${barberId}") is BLOCKED due to an existing appointment.`);
+        return false; // Slot NO disponible debido a una cita existente
+      }
       
-      if (appointmentsData && appointmentsData.length > 0) return false;
-      
-      return true;
+      console.log(`[LOG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} (parsed from "${barberId}") is AVAILABLE.`);
+      return true; // Si pasó todos los chequeos, el slot SÍ está disponible
     } catch (err) {
-      return false;
+      console.error(`[LOG isTimeSlotAvailable] Error in isTimeSlotAvailable for date ${date}, time ${time}, barberId ${barberId}:`, err);
+      return false; // Fail safe
     }
-  }, [adminSettings]);
+  }, [adminSettings]); // adminSettings es dependencia porque se usa en isRestrictedHourWithAdvance
 
   const getDayAvailability = useCallback(async (date: Date, barberId?: string) => {
     const formattedDate = formatDateForSupabase(date);
-    const hours = getAvailableHoursForDate(date, barberId);
+    const hours = getAvailableHoursForDate(date, barberId); // barberId aquí es el string original o undefined
     if (hours.length === 0) return {};
 
-    const [{ data: holidaysData }, { data: blockedData }, { data: appointmentsData }] = await Promise.all([
+    // Parse barberId para consultas a la DB y lógica interna
+    let queryBarberIdAsNumber: number | null = null;
+    if (barberId && typeof barberId === 'string') {
+      const parsed = parseInt(barberId, 10);
+      if (!isNaN(parsed)) {
+        queryBarberIdAsNumber = parsed;
+      }
+    } else if (typeof barberId === 'number') {
+      queryBarberIdAsNumber = barberId;
+    }
+
+    console.log(`[LOG getDayAvailability] Date: ${formattedDate}, Querying for barberId (string): "${barberId}", ParsedAsNumber: ${queryBarberIdAsNumber}`);
+
+    // Fetch all potentially relevant data in parallel
+    const [holidaysResult, blockedResult, appointmentsResult] = await Promise.allSettled([
       supabase.from('holidays').select('id, barber_id').eq('date', formattedDate),
-      supabase.from('blocked_times').select('time, timeSlots, barber_id').eq('date', formattedDate), // Fetch barber_id
-      barberId 
-        ? supabase.from('appointments').select('time').eq('date', formattedDate).eq('barber_id', barberId).eq('cancelled', false)
-        : supabase.from('appointments').select('time').eq('date', formattedDate).eq('cancelled', false),
+      supabase.from('blocked_times').select('time, timeSlots, barber_id').eq('date', formattedDate),
+      queryBarberIdAsNumber !== null
+        ? supabase.from('appointments').select('time').eq('date', formattedDate).eq('barber_id', queryBarberIdAsNumber).eq('cancelled', false)
+        : supabase.from('appointments').select('time').eq('date', formattedDate).eq('cancelled', false)
     ]);
+
+    // Handle results and errors
+    const holidaysData = holidaysResult.status === 'fulfilled' ? holidaysResult.value.data : null;
+    if (holidaysResult.status === 'rejected') console.error("Error fetching holidays in getDayAvailability:", holidaysResult.reason);
+
+    const blockedData = blockedResult.status === 'fulfilled' ? blockedResult.value.data : null;
+    if (blockedResult.status === 'rejected') console.error("Error fetching blocked_times in getDayAvailability:", blockedResult.reason);
+    console.log(`[LOG getDayAvailability] All blockedData for date ${formattedDate}:`, JSON.stringify(blockedData));
+
+
+    const appointmentsData = appointmentsResult.status === 'fulfilled' ? appointmentsResult.value.data : null;
+    if (appointmentsResult.status === 'rejected') console.error("Error fetching appointments in getDayAvailability:", appointmentsResult.reason);
+
 
     const availability: { [hour: string]: boolean } = {};
 
-    // Process holidays considering barber_id
+    // Process holidays
     let activeHolidaysForContext = false;
     if (holidaysData && holidaysData.length > 0) {
       const isGeneralHoliday = holidaysData.some(h => h.barber_id === null);
       if (isGeneralHoliday) {
         activeHolidaysForContext = true;
-      } else if (barberId) { // Only check barber-specific if no general holiday
-        const isBarberSpecificHoliday = holidaysData.some(h => h.barber_id === barberId);
+      } else if (queryBarberIdAsNumber !== null) {
+        const isBarberSpecificHoliday = holidaysData.some(h => h.barber_id === queryBarberIdAsNumber);
         if (isBarberSpecificHoliday) {
           activeHolidaysForContext = true;
         }
       }
-      // If not multiple_barbers_enabled, any holiday (even barber specific) might count as general
-      // For now, sticking to the logic: general holidays block all, specific holidays block specific barber.
     }
 
     if (activeHolidaysForContext) {
+      console.log(`[LOG getDayAvailability] Date ${formattedDate} is a HOLIDAY for barber ${queryBarberIdAsNumber}. All slots unavailable.`);
       hours.forEach(h => { availability[h] = false; });
-      return availability; // If it's a holiday for the current context, all hours are unavailable.
+      return availability;
     }
 
+    // Process blocked times
     const blockedSlots = new Set<string>();
     if (blockedData) {
-      let queryBarberIdAsNumber: number | null = null;
-      if (barberId && typeof barberId === 'string') {
-        const parsed = parseInt(barberId, 10);
-        if (!isNaN(parsed)) {
-          queryBarberIdAsNumber = parsed;
-        }
-      } else if (typeof barberId === 'number') { // Should not happen
-        queryBarberIdAsNumber = barberId;
-      }
-      console.log(`[LOG getDayAvailability] Date: ${formattedDate}, Querying for barberId (string): "${barberId}", ParsedAsNumber: ${queryBarberIdAsNumber}`);
-      console.log(`[LOG getDayAvailability] All blockedData for date ${formattedDate}:`, JSON.stringify(blockedData));
-
       for (const block of blockedData) {
         console.log(`[LOG getDayAvailability] Processing Block: queryForBarber=${queryBarberIdAsNumber}, blockInfo=${JSON.stringify(block)}`);
         const isApplicableBlock = block.barber_id === null || (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber);
         console.log(`[LOG getDayAvailability] -> Is block applicable? ${isApplicableBlock}`);
-
         if (isApplicableBlock) {
           if (block.timeSlots && Array.isArray(block.timeSlots)) {
             block.timeSlots.forEach((slot: string) => blockedSlots.add(slot));
           }
-          if (block.time) { // Ensure single 'time' entries are also added
+          if (block.time) {
             blockedSlots.add(block.time);
           }
         }
