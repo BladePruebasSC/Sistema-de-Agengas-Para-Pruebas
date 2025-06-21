@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-import { services } from '../utils/mockData';
+// import { services as mockServices } from '../utils/mockData'; // No longer use mockServices directly for display
 import { useAppointments } from '../context/AppointmentContext';
 import { Phone, MessageSquare, Calendar as CalendarIcon, Clock as ClockIcon, User } from 'lucide-react';
 import { es } from 'date-fns/locale';
@@ -19,14 +19,24 @@ const BookingForm: React.FC<BookingFormProps> = ({
   selectedBarberId,
   onSuccess
 }) => {
-  const { createAppointment, barbers, adminSettings } = useAppointments();
+  const { createAppointment, barbers, adminSettings, services } = useAppointments(); // Get services from context
   const [formData, setFormData] = useState({
     clientName: '',
     clientPhone: '',
-    service: services[0]?.id || '',
+    service: '', // Initialize service as empty or handle loading state
     barber_id: selectedBarberId || adminSettings.default_barber_id || ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    // Set default service when services are loaded from context
+    if (services && services.length > 0 && !formData.service) {
+      setFormData(prev => ({
+        ...prev,
+        service: services[0].id
+      }));
+    }
+  }, [services, formData.service]);
 
   const formatPhoneNumber = (value: string) => {
     const numbers = value.replace(/\D/g, '');

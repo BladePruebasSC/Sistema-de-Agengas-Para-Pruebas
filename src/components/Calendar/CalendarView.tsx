@@ -109,27 +109,55 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
   }, [selectedDate, selectedBarberId, checkAvailability]);
 
-  const isHoliday = useCallback((date: Date) => {
-    return holidays.some(holiday => isSameDate(holiday.date, date));
+  const isHolidayForContext = useCallback((date: Date, currentBarberId?: string | null) => {
+    if (!date) return false;
+    return holidays.some(holiday => {
+      const holidayDateMatches = isSameDate(holiday.date, date);
+      if (!holidayDateMatches) return false;
+
+      // Si es un feriado general, aplica a todos.
+      if (holiday.barber_id === null) return true;
+
+      // Si se ha seleccionado un barbero, y el feriado es para ese barbero.
+      if (currentBarberId && holiday.barber_id === currentBarberId) return true;
+
+      // Si no se ha seleccionado barbero (mostrando disponibilidad general) y el feriado es específico, no lo consideramos festivo para la vista general.
+      // A menos que la configuración de "múltiples barberos" esté desactivada, en cuyo caso cualquier feriado específico podría considerarse general.
+      // Para este caso, si no hay barberId seleccionado, solo los generales cuentan.
+      if (!currentBarberId && holiday.barber_id !== null) return false;
+
+      return false;
+    });
   }, [holidays]);
 
   const tileClassName = ({ date, view }: { date: Date; view: string }) => {
     if (view !== 'month') return '';
     const classes = [];
     if (isToday(date)) classes.push('bg-blue-100');
-    if (isHoliday(date)) classes.push('holiday');
+    // Usar isHolidayForContext con el barbero seleccionado para la clase
+    if (isHolidayForContext(date, selectedBarberId)) classes.push('holiday');
     return classes.join(' ');
   };
 
   const tileDisabled = ({ date, view }: { date: Date; view: string }) => {
     if (view !== 'month') return false;
-    return isBefore(date, today) || isHoliday(date);
+    // Un tile está deshabilitado si es anterior a hoy O si es un feriado para el contexto actual (barbero seleccionado o general)
+    return isBefore(date, today) || isHolidayForContext(date, selectedBarberId);
   };
 
   const tileContent = ({ date, view }: { date: Date; view: string }) => {
     if (view !== 'month') return null;
-    if (isHoliday(date)) {
-      return <div className="text-xs mt-1 text-red-500">Feriado</div>;
+    // Mostrar "Feriado" si es relevante para el contexto actual
+    if (isHolidayForContext(date, selectedBarberId)) {
+      const holidayInfo = holidays.find(h => isSameDate(h.date, date) && (h.barber_id === null || h.barber_id === selectedBarberId));
+      let holidayText = "Feriado";
+      if (holidayInfo?.barber_id && adminSettings.multiple_barbers_enabled) {
+        const barber = barbers.find(b => b.id === holidayInfo.barber_id);
+        if (barber) {
+          // holidayText = `Feriado (${barber.name.split(' ')[0]})`; // Podría ser muy largo
+        }
+      }
+      return <div className="text-xs mt-1 text-red-500">{holidayText}</div>;
     }
     return null;
   };
@@ -235,7 +263,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                       date={selectedDate}
                       onSelectTime={handleTimeSelect}
                       selectedTime={selectedTime}
-                      isHoliday={isHoliday(selectedDate)}
+                      isHoliday={isHolidayForContext(selectedDate, selectedBarberId || undefined)}
                       availableHours={availableHours}
                       barberId={selectedBarberId || undefined}
                     />

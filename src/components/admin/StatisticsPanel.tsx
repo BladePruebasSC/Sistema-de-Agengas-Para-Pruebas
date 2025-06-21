@@ -41,6 +41,8 @@ const StatisticsPanel: React.FC = () => {
   const { appointments, barbers, adminSettings, services } = useAppointments(); // Added services from context
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
+
+  console.log('[StatisticsPanel] Services from context:', services); // Log services from context
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([]);
   const [serviceStats, setServiceStats] = useState<ServiceStats[]>([]);
   const [hourStats, setHourStats] = useState<HourStats[]>([]);
@@ -74,6 +76,7 @@ const StatisticsPanel: React.FC = () => {
 
   const calculateStatistics = () => {
     const activeAppointments = getFilteredAppointments();
+    console.log('[StatisticsPanel] Active appointments for stats:', activeAppointments);
 
     // Estadísticas de los últimos 6 meses
     const last6Months = Array.from({ length: 6 }, (_, i) => {
@@ -88,6 +91,7 @@ const StatisticsPanel: React.FC = () => {
       
       const revenue = monthAppointments.reduce((total, app) => {
         const service = services.find(s => s.id === app.service);
+        // console.log(`[Stats - 6m Revenue] App service ID: ${app.service}, Found service: ${JSON.stringify(service)}, Price: ${service?.price}`);
         return total + (service?.price || 0);
       }, 0);
 
@@ -114,6 +118,7 @@ const StatisticsPanel: React.FC = () => {
     
     currentMonthAppointments.forEach(app => {
       const service = services.find(s => s.id === app.service);
+      // console.log(`[Stats - ServiceCount] App service ID: ${app.service}, Found service: ${JSON.stringify(service)}`);
       if (service) {
         serviceCount.set(service.name, (serviceCount.get(service.name) || 0) + 1);
         serviceRevenue.set(service.name, (serviceRevenue.get(service.name) || 0) + service.price);
@@ -146,6 +151,7 @@ const StatisticsPanel: React.FC = () => {
     // Estadísticas generales del mes actual
     const totalRevenue = currentMonthAppointments.reduce((total, app) => {
       const service = services.find(s => s.id === app.service);
+      // console.log(`[Stats - MonthRevenue] App service ID: ${app.service}, Found service: ${JSON.stringify(service)}, Price: ${service?.price}`);
       return total + (service?.price || 0);
     }, 0);
 

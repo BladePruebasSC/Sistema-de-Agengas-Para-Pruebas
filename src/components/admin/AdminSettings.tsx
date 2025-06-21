@@ -438,24 +438,25 @@ const AdminSettings: React.FC = () => {
                     </div>
 
                     {dayHours.is_open && (
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Responsive grid */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Mañana
                           </label>
-                          <div className="flex space-x-2">
+                          {/* Responsive flex container for time inputs */}
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0">
                             <input
                               type="time"
                               value={dayHours.morning_start || '07:00'}
                               onChange={(e) => handleHoursChange(index, 'morning_start', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // Responsive width and flex
                             />
-                            <span className="self-center text-gray-500">a</span>
+                            <span className="self-center text-gray-500 px-1 text-center sm:text-left">a</span> {/* Adjusted span */}
                             <input
                               type="time"
                               value={dayHours.morning_end || '12:00'}
                               onChange={(e) => handleHoursChange(index, 'morning_end', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // Responsive width and flex
                             />
                           </div>
                         </div>
@@ -464,19 +465,20 @@ const AdminSettings: React.FC = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Tarde
                           </label>
-                          <div className="flex space-x-2">
+                          {/* Responsive flex container for time inputs */}
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0">
                             <input
                               type="time"
                               value={dayHours.afternoon_start || '15:00'}
                               onChange={(e) => handleHoursChange(index, 'afternoon_start', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // Responsive width and flex
                             />
-                            <span className="self-center text-gray-500">a</span>
+                            <span className="self-center text-gray-500 px-1 text-center sm:text-left">a</span> {/* Adjusted span */}
                             <input
                               type="time"
                               value={dayHours.afternoon_end || '21:00'}
                               onChange={(e) => handleHoursChange(index, 'afternoon_end', e.target.value)}
-                              className="block w-full p-2 border border-gray-300 rounded-md text-sm"
+                              className="block w-full sm:w-auto flex-1 p-2 border border-gray-300 rounded-md text-sm" // Responsive width and flex
                             />
                           </div>
                         </div>
