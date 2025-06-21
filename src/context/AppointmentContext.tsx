@@ -443,25 +443,26 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
           queryBarberIdAsNumber = barberId;
         }
 
-        // console.log(`[isTimeSlotAvailable] Date: ${formattedDate}, Time: ${time}, Querying for barberId (string): "${barberId}", ParsedAsNumber: ${queryBarberIdAsNumber}, Block_barber_id: ${block.barber_id}`);
 
-        // Check if the block applies
+        console.log(`[DEBUG isTimeSlotAvailable] Checking Block: date=${formattedDate}, slotTime=${time}, queryForBarber=${queryBarberIdAsNumber}, blockInfo=${JSON.stringify(block)}`);
+
+        let blockIsCurrentlyApplicable = false;
         if (block.barber_id === null) { // General block
-          // console.log(` -> General block applies.`);
-          return true;
+          blockIsCurrentlyApplicable = true;
+          console.log(`[DEBUG isTimeSlotAvailable] -> General block. Applicable: ${blockIsCurrentlyApplicable}`);
+        } else if (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber) { // Specific block for the queried barber
+          blockIsCurrentlyApplicable = true;
+          console.log(`[DEBUG isTimeSlotAvailable] -> Specific block for THIS barber (${queryBarberIdAsNumber}). Applicable: ${blockIsCurrentlyApplicable}`);
+        } else {
+          // Specific block for another barber, or general query for a specific block
+          console.log(`[DEBUG isTimeSlotAvailable] -> Specific block for another barber (${block.barber_id}) or general query. Query: ${queryBarberIdAsNumber}. Applicable: ${blockIsCurrentlyApplicable}`);
         }
-        if (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber) { // Specific block for the queried barber
-          // console.log(` -> Specific block for this barber applies.`);
-          return true;
-        }
-        // If it's a specific block for a DIFFERENT barber, or if querying generally (queryBarberIdAsNumber is null) and block is specific
-        // console.log(` -> Block for barber ${block.barber_id} does NOT apply to query for ${queryBarberIdAsNumber}.`);
-        return false;
+        return blockIsCurrentlyApplicable;
       })) {
-        // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} is considered BLOCKED by one of the rules.`);
+        console.log(`[DEBUG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} is BLOCKED by a rule.`);
         return false; // If .some() found an applicable block, the slot is NOT available.
       }
-      // console.log(`[isTimeSlotAvailable] Slot ${time} on ${formattedDate} is considered AVAILABLE (after checking blocks).`);
+      console.log(`[DEBUG isTimeSlotAvailable] Slot ${time} on ${formattedDate} for barber ${queryBarberIdAsNumber} is AVAILABLE (after all blocks).`);
       
       // Verificar citas existentes
       let appointmentQuery = supabase
@@ -533,14 +534,23 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         queryBarberIdAsNumber = barberId;
       }
       // console.log(`[getDayAvailability] Date: ${formattedDate}, Querying for barberId (string): "${barberId}", ParsedAsNumber: ${queryBarberIdAsNumber}`);
+      // console.log(`[getDayAvailability] Date: ${formattedDate}, Querying for barberId (string): "${barberId}", ParsedAsNumber: ${queryBarberIdAsNumber}`);
       // console.log(`[getDayAvailability] All blockedData for date ${formattedDate}:`, JSON.stringify(blockedData));
 
       for (const block of blockedData) {
-        // console.log(`[getDayAvailability] Processing block: ${JSON.stringify(block)}`);
-        const isApplicableBlock = block.barber_id === null || (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber);
-        // console.log(`[getDayAvailability] Is block applicable? ${isApplicableBlock}`);
+        console.log(`[DEBUG getDayAvailability] Processing Block: queryForBarber=${queryBarberIdAsNumber}, blockInfo=${JSON.stringify(block)}`);
+        let blockIsCurrentlyApplicable = false;
+        if (block.barber_id === null) {
+          blockIsCurrentlyApplicable = true;
+          console.log(`[DEBUG getDayAvailability] -> General block. Applicable: ${blockIsCurrentlyApplicable}`);
+        } else if (queryBarberIdAsNumber !== null && block.barber_id === queryBarberIdAsNumber) {
+          blockIsCurrentlyApplicable = true;
+          console.log(`[DEBUG getDayAvailability] -> Specific block for THIS barber (${queryBarberIdAsNumber}). Applicable: ${blockIsCurrentlyApplicable}`);
+        } else {
+          console.log(`[DEBUG getDayAvailability] -> Specific block for another barber (${block.barber_id}) or general query. Query: ${queryBarberIdAsNumber}. Applicable: ${blockIsCurrentlyApplicable}`);
+        }
 
-        if (isApplicableBlock) {
+        if (blockIsCurrentlyApplicable) {
           if (block.timeSlots && Array.isArray(block.timeSlots)) {
             block.timeSlots.forEach((slot: string) => blockedSlots.add(slot));
           }
