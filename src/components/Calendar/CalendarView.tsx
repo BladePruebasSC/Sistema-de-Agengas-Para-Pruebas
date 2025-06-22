@@ -103,10 +103,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   useEffect(() => {
     if (selectedDate) {
+      console.log(`[CalendarView useEffect] Preparing to check availability. Date: ${selectedDate}, selectedBarberId: ${selectedBarberId}, typeof selectedBarberId: ${typeof selectedBarberId}`);
       checkAvailability(selectedDate, selectedBarberId || undefined);
     } else {
       setAvailableHours([]);
     }
+    // Consider adding blockedTimes and holidays from context to dependencies if issues persist
+    // related to freshness of data after creating new blocks/holidays.
+    // }, [selectedDate, selectedBarberId, checkAvailability, blockedTimes, holidays]);
   }, [selectedDate, selectedBarberId, checkAvailability]);
 
   const isHolidayForContext = useCallback((date: Date, currentBarberId?: string | null) => {
