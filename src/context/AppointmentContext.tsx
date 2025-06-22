@@ -417,10 +417,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         }
       }
       
-      // Verificar horarios bloqueados
+      // Verificar horarios bloqueados - CORREGIDO
       const { data: blockedData, error: blockedError } = await supabase
         .from('blocked_times')
-        .select('time, timeSlots, barber_id') // Fetch barber_id
+        .select('time, timeSlots, barber_id')
         .eq('date', formattedDate);
 
       if (blockedError) {
@@ -429,14 +429,25 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
       
       if (blockedData && blockedData.some(block => {
+        // Verificar si el horario coincide
         const isSlotMatch = (block.time && block.time === time) ||
                            (block.timeSlots && Array.isArray(block.timeSlots) && block.timeSlots.includes(time));
         if (!isSlotMatch) return false;
 
-        // Check if the block applies
-        if (block.barber_id === null) return true; // General block
-        if (barberId && block.barber_id === barberId) return true; // Specific block for this barber
-        return false; // Specific block for another barber
+        // CORREGIDO: Verificar si el bloqueo aplica al contexto actual
+        if (block.barber_id === null) {
+          // Es un bloqueo general, aplica a todos
+          return true;
+        } else if (barberId && block.barber_id === barberId) {
+          // Es un bloqueo específico para este barbero
+          return true;
+        } else if (!barberId) {
+          // No hay barbero específico, pero hay bloqueos específicos de barbero
+          // En este caso, el bloqueo específico NO aplica a la consulta general
+          return false;
+        }
+        
+        return false; // Bloqueo específico para otro barbero
       })) {
         return false;
       }
@@ -502,8 +513,20 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
     const blockedSlots = new Set<string>();
     if (blockedData) {
       for (const block of blockedData) {
-        // Check if the block applies to the current context (general or specific barber)
-        const isApplicableBlock = block.barber_id === null || (barberId && block.barber_id === barberId);
+        // CORREGIDO: Verificar si el bloqueo aplica al contexto actual
+        let isApplicableBlock = false;
+        
+        if (block.barber_id === null) {
+          // Bloqueo general, aplica a todos
+          isApplicableBlock = true;
+        } else if (barberId && block.barber_id === barberId) {
+          // Bloqueo específico para este barbero
+          isApplicableBlock = true;
+        } else if (!barberId) {
+          // Consulta general, pero el bloqueo es específico de barbero
+          // NO aplica a la consulta general
+          isApplicableBlock = false;
+        }
 
         if (isApplicableBlock) {
           if (block.timeSlots && Array.isArray(block.timeSlots)) {
@@ -755,8 +778,11 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         time: Array.isArray(blockedTimeData.timeSlots) ? blockedTimeData.timeSlots[0] : blockedTimeData.timeSlots,
         timeSlots: blockedTimeData.timeSlots,
         reason: blockedTimeData.reason || 'Horario bloqueado',
-        barber_id: blockedTimeData.barber_id || null // Add barber_id, defaulting to null
+        barber_id: blockedTimeData.barber_id || null // CORREGIDO: Asegurar que se guarde correctamente
       };
+      
+      console.log('Creating blocked time with data:', dataToInsert); // Debug log
+      
       const { data, error } = await supabase
         .from('blocked_times')
         .insert([dataToInsert])
@@ -776,6 +802,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
       return newBlockedTime;
     } catch (error) {
+      console.error('Error creating blocked time:', error); // Debug log
       toast.error(error instanceof Error ? error.message : 'Error al crear el bloqueo de horario');
       throw error;
     }
@@ -828,7 +855,10 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const deleteBarber = async (id: string): Promise<void> => {
     try {
-      // First, delete related barber_schedules
+      console.log('Attempting to delete barber with ID:', id); // Debug log
+      
+      // CORREGIDO: Eliminar completamente de la base de datos
+      // Primero eliminar horarios relacionados
       const { error: scheduleError } = await supabase
         .from('barber_schedules')
         .delete()
@@ -839,7 +869,7 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         throw new Error(`Error al eliminar los horarios del barbero: ${scheduleError.message}`);
       }
 
-      // Then, delete the barber
+      // Luego eliminar el barbero
       const { error: barberError } = await supabase
         .from('barbers')
         .delete()
@@ -850,11 +880,14 @@ export const AppointmentProvider: React.FC<{ children: ReactNode }> = ({ childre
         throw new Error(`Error al eliminar el barbero: ${barberError.message}`);
       }
 
+      // Actualizar estado local
       setBarbers(prev => prev.filter(b => b.id !== id));
-      // Also update barberSchedules state locally if needed, though re-fetch might be simpler
       setBarberSchedules(prev => prev.filter(bs => bs.barber_id !== id));
+      
+      console.log('Barber deleted successfully'); // Debug log
       toast.success('Barbero y sus horarios eliminados exitosamente');
     } catch (error) {
+      console.error('Error in deleteBarber:', error); // Debug log
       toast.error(error instanceof Error ? error.message : 'Error al eliminar barbero');
       throw error;
     }
