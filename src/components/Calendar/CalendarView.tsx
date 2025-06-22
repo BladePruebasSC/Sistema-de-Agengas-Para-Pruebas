@@ -92,6 +92,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         filteredHours.map(hour => isTimeSlotAvailable(date, hour, barberId))
       );
       const available = filteredHours.filter((hour, idx) => results[idx]);
+      console.log(`[CalendarView checkAvailability] Date: ${date}, ForBarber: ${barberId}, Filtered Business Hours: ${JSON.stringify(filteredHours)}, Availability API Results: ${JSON.stringify(results)}, Final UI Available Hours: ${JSON.stringify(available)}`);
       setAvailableHours(available);
     } catch (error) {
       console.error('Error checking availability:', error);

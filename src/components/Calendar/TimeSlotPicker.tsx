@@ -19,50 +19,12 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   selectedTime, 
   isHoliday,
   availableHours,
-  barberId
+  barberId // Aunque barberId ya no se usará directamente aquí para filtrar citas/bloqueos
 }) => {
-  const { blockedTimes, appointments, getAvailableHoursForDate } = useAppointments();
+  const { getAvailableHoursForDate } = useAppointments(); // Solo necesitamos esto para obtener allHours
   
-  // Encontrar los horarios bloqueados para la fecha seleccionada
-  const blockedTimesForDate = blockedTimes.find(
-    block => isSameDate(block.date, date)
-  );
-  
-  // Encontrar las citas para la fecha seleccionada
-  const appointmentsForDate = appointments.filter(
-    app => isSameDate(app.date, date) && !app.cancelled
-  );
-  
-  const isTimeSlotBlocked = (time: string): boolean => {
-    // Verificar si el horario está bloqueado manualmente
-    if (blockedTimesForDate) {
-      // Verificar en timeSlots (array)
-      if (Array.isArray(blockedTimesForDate.timeSlots) && blockedTimesForDate.timeSlots.includes(time)) {
-        return true;
-      }
-      // Verificar en time (string individual) - compatibilidad hacia atrás
-      if (blockedTimesForDate.time === time) {
-        return true;
-      }
-    }
-    return false;
-  };
-  
-  const isTimeSlotBooked = (time: string): boolean => {
-    // Verificar si hay una cita en ese horario
-    if (barberId) {
-      // Si hay barbero específico, verificar solo para ese barbero
-      return appointmentsForDate.some(app => app.time === time && app.barber_id === barberId);
-    } else {
-      // Si no hay barbero específico, verificar todas las citas
-      return appointmentsForDate.some(app => app.time === time);
-    }
-  };
-  
-  const isTimeSlotAvailable = (time: string): boolean => {
-    return !isTimeSlotBlocked(time) && !isTimeSlotBooked(time);
-  };
-  
+  console.log(`[TimeSlotPicker] Received Date: ${date}, SelectedTime: ${selectedTime}, IsHoliday: ${isHoliday}, AvailableHours Prop: ${JSON.stringify(availableHours)}, BarberId Prop: ${barberId}`);
+
   if (isHoliday) {
     return (
       <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center">
@@ -86,39 +48,34 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
       {allHours.map((hour) => {
-        const isBlocked = isTimeSlotBlocked(hour);
-        const isBooked = isTimeSlotBooked(hour);
-        const isAvailable = isTimeSlotAvailable(hour) && availableHours.includes(hour);
+        // La disponibilidad ahora se determina SOLELY por el prop availableHours
+        // que ya ha sido calculado por CalendarView usando la lógica del contexto.
+        const isActuallyAvailable = availableHours.includes(hour);
         
         let buttonClass = 'p-3 rounded-lg text-center transition-all ';
-        let statusText = '';
+        // let statusText = ''; // No necesitamos distinguir la causa de la no disponibilidad aquí.
         
         if (selectedTime === hour) {
           buttonClass += 'bg-red-600 text-white';
-        } else if (isBlocked) {
-          buttonClass += 'bg-orange-100 text-orange-800 cursor-not-allowed';
-          statusText = 'Bloqueado';
-        } else if (isBooked) {
-          buttonClass += 'bg-red-100 text-red-800 cursor-not-allowed';
-          statusText = 'Ocupado';
-        } else if (isAvailable) {
+        } else if (isActuallyAvailable) {
           buttonClass += 'bg-green-100 hover:bg-green-200 text-green-800';
         } else {
-          buttonClass += 'bg-gray-100 text-gray-400 cursor-not-allowed';
-          statusText = 'No disponible';
+          // Si no está en availableHours, está no disponible por alguna razón (bloqueo, cita, feriado ya manejado)
+          buttonClass += 'bg-gray-100 text-gray-400 cursor-not-allowed line-through';
+          // statusText = 'No Disp.'; // Opcional: si quieres un texto genérico
         }
         
         return (
           <button
             key={hour}
-            onClick={() => isAvailable && onSelectTime(hour)}
-            disabled={!isAvailable || isHoliday}
+            onClick={() => isActuallyAvailable && onSelectTime(hour)}
+            disabled={!isActuallyAvailable || isHoliday} // isHoliday ya se chequea arriba, pero doble seguridad no daña.
             className={buttonClass}
           >
             <div className="font-medium">{hour}</div>
-            {statusText && (
+            {/* {statusText && (
               <div className="text-xs mt-1">{statusText}</div>
-            )}
+            )} */}
           </button>
         );
       })}
