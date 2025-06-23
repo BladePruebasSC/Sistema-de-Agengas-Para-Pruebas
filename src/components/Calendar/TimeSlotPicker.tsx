@@ -23,7 +23,7 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
 }) => {
   const { getAvailableHoursForDate } = useAppointments(); // Solo necesitamos esto para obtener allHours
   
-  console.log(`[TimeSlotPicker] Received Date: ${date}, SelectedTime: ${selectedTime}, IsHoliday: ${isHoliday}, AvailableHours Prop: ${JSON.stringify(availableHours)}, BarberId Prop: ${barberId}`);
+  console.log(`[TimeSlotPicker Init] Props received - Date: ${date}, SelectedTime: ${selectedTime}, IsHoliday: ${isHoliday}, AvailableHours: ${JSON.stringify(availableHours)}, BarberId: ${barberId}`);
 
   if (isHoliday) {
     return (
@@ -48,34 +48,36 @@ const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
       {allHours.map((hour) => {
-        // La disponibilidad ahora se determina SOLELY por el prop availableHours
-        // que ya ha sido calculado por CalendarView usando la lógica del contexto.
         const isActuallyAvailable = availableHours.includes(hour);
         
+        // Log para cada hora dentro del map
+        if (hour === "10:00 AM" || hour === "9:00 AM") { // Log específico para horas de interés o para todas si es necesario
+           console.log(`[TimeSlotPicker map] Hour: "${hour}", availableHours.includes("${hour}"): ${availableHours.includes(hour)}, isActuallyAvailable: ${isActuallyAvailable}, selectedTime: "${selectedTime}"`);
+        }
+
         let buttonClass = 'p-3 rounded-lg text-center transition-all ';
-        // let statusText = ''; // No necesitamos distinguir la causa de la no disponibilidad aquí.
         
         if (selectedTime === hour) {
           buttonClass += 'bg-red-600 text-white';
         } else if (isActuallyAvailable) {
           buttonClass += 'bg-green-100 hover:bg-green-200 text-green-800';
         } else {
-          // Si no está en availableHours, está no disponible por alguna razón (bloqueo, cita, feriado ya manejado)
           buttonClass += 'bg-gray-100 text-gray-400 cursor-not-allowed line-through';
-          // statusText = 'No Disp.'; // Opcional: si quieres un texto genérico
         }
         
+        // Log de la clase final aplicada (opcional, pero puede ser útil)
+        // if (hour === "10:00 AM" || hour === "9:00 AM") {
+        //   console.log(`[TimeSlotPicker map] Hour: "${hour}", final buttonClass: "${buttonClass}"`);
+        // }
+
         return (
           <button
             key={hour}
             onClick={() => isActuallyAvailable && onSelectTime(hour)}
-            disabled={!isActuallyAvailable || isHoliday} // isHoliday ya se chequea arriba, pero doble seguridad no daña.
+            disabled={!isActuallyAvailable || isHoliday}
             className={buttonClass}
           >
             <div className="font-medium">{hour}</div>
-            {/* {statusText && (
-              <div className="text-xs mt-1">{statusText}</div>
-            )} */}
           </button>
         );
       })}
